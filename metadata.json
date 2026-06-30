@@ -1,0 +1,6 @@
+{
+  "name": "متجر الخط العربي الاحترافي",
+  "description": "متجر الكتروني احترافي متصل بجوجل شيت لبيع منتجات الخط العربي وإدارة الطلبات والمشتركين والخصومات مع نظام فواتير PDF وإشعارات تلجرام.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
