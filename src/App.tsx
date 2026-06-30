@@ -187,7 +187,7 @@ export default function App() {
         const response = await fetch(`${sheetsUrl}`, {
           method: 'POST',
           mode: 'cors',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify({ action: 'validate_promo', code: uppercaseCode })
         });
         if (response.ok) {
@@ -258,7 +258,7 @@ export default function App() {
       quantities: quantitiesList,
       totalAmount: finalTotal,
       promoCode: orderDetails.promoCode,
-      telegramSent: 'تم الإرسال',
+      telegramSent: 'جاري الإرسال...',
       pdfLink: '#'
     };
 
@@ -267,7 +267,7 @@ export default function App() {
         const response = await fetch(`${sheetsUrl}`, {
           method: 'POST',
           mode: 'cors',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify({
             action: 'submit_order',
             order: {
@@ -280,16 +280,28 @@ export default function App() {
             }
           })
         });
+
         if (response.ok) {
           const res = await response.json();
           if (res.status === 'success') {
+            const finalOrderRecord: Order = {
+              ...newOrderRecord,
+              orderId: res.orderId || orderId,
+              telegramSent: res.telegramSent || 'تم الإرسال',
+              pdfLink: res.pdfLink || '#'
+            };
             // Append cloud order to state
-            setOrders(prev => [newOrderRecord, ...prev]);
+            setOrders(prev => [finalOrderRecord, ...prev]);
             return { status: 'success', orderId: res.orderId || orderId };
+          } else {
+            return { status: 'error', message: res.message || 'فشل في حفظ الطلب بجدول قوقل شيت.' };
           }
+        } else {
+          return { status: 'error', message: 'لم يتمكن الموقع من تلقي استجابة صحيحة من قوقل شيت (HTTP ' + response.status + ')' };
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error('Failed to submit order directly to Google Sheets.', err);
+        return { status: 'error', message: 'خطأ في الاتصال بقوقل شيت: ' + (err.message || err) };
       }
     }
 
@@ -318,7 +330,7 @@ export default function App() {
         const response = await fetch(`${sheetsUrl}`, {
           method: 'POST',
           mode: 'cors',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify({
             action: 'register_member',
             name: memberDetails.name,
@@ -331,10 +343,15 @@ export default function App() {
           if (res.status === 'success') {
             setMembers(prev => [newMemberRecord, ...prev]);
             return { status: 'success', code: res.code || 'WELCOME10' };
+          } else {
+            return { status: 'error', message: res.message || 'فشل التسجيل في قوقل شيت' };
           }
+        } else {
+          return { status: 'error', message: 'استجابة غير صحيحة من قوقل شيت' };
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error('Failed to submit member directly to Google Sheets.', err);
+        return { status: 'error', message: 'خطأ في الاتصال بقوقل شيت: ' + (err.message || err) };
       }
     }
 
