@@ -556,8 +556,8 @@ function generateInvoicePDF(orderId, order) {
         var row = table.appendTableRow();
         var itemTitle = item.title || 'غير معروف';
         var itemQuantity = item.quantity || 1;
-        var unitPrice = (item.finalPrice || item.discountedPrice || item.price || 0).toFixed(2);
-        var itemTotal = ((item.finalPrice || item.discountedPrice || item.price || 0) * itemQuantity).toFixed(2);
+        var unitPrice = Number(item.finalPrice || item.discountedPrice || item.price || 0).toFixed(0);
+        var itemTotal = (Number(item.finalPrice || item.discountedPrice || item.price || 0) * itemQuantity).toFixed(0);
         
         row.appendTableCell(itemTitle).getChild(0).asParagraph().setAlignment(DocumentApp.HorizontalAlignment.RIGHT);
         row.appendTableCell(itemQuantity.toString()).getChild(0).asParagraph().setAlignment(DocumentApp.HorizontalAlignment.RIGHT);
@@ -596,10 +596,14 @@ function sendEmailConfirmation(orderId, order, pdfFile) {
     var timestamp = Utilities.formatDate(new Date(), 'GMT+7', 'yyyy-MM-dd HH:mm:ss');
     var promoCode = order.promoCode || '';
     
-    var totalAmount = order.items.reduce(function(sum, item) {
-      var price = item.finalPrice || item.discountedPrice || item.price || 0;
-      return sum + (price * item.quantity);
-    }, 0);
+    var totalAmount = 0;
+    if (order.items && order.items.length > 0) {
+      totalAmount = order.items.reduce(function(sum, item) {
+        var price = Number(item.finalPrice || item.discountedPrice || item.price || 0);
+        var qty = Number(item.quantity || 1);
+        return sum + (price * qty);
+      }, 0);
+    }
 
     // 1. إرسال البريد الإلكتروني للمشرف (صاحب المتجر)
     if (settings.recipientEmail) {
@@ -629,23 +633,26 @@ function sendEmailConfirmation(orderId, order, pdfFile) {
                        '<th style="padding: 8px; text-align: center;">' + (labels['total_header'] || 'الإجمالي (฿)') + '</th>' +
                      '</tr>';
         
-        order.items.forEach(function(item) {
-          var origP = item.originalPrice || item.price || 0;
-          var discP = item.discountedPrice || origP;
-          var finalP = item.finalPrice || discP;
-          body += '<tr>' +
-                    '<td style="padding: 8px;">' + item.title + '</td>' +
-                    '<td style="padding: 8px; text-align: center;">' + origP.toFixed(2) + '</td>' +
-                    '<td style="padding: 8px; text-align: center;">' + discP.toFixed(2) + '</td>' +
-                    '<td style="padding: 8px; text-align: center;">' + finalP.toFixed(2) + '</td>' +
-                    '<td style="padding: 8px; text-align: center;">' + item.quantity + '</td>' +
-                    '<td style="padding: 8px; text-align: center;">' + (finalP * item.quantity).toFixed(2) + '</td>' +
-                  '</tr>';
-        });
+        if (order.items && order.items.length > 0) {
+          order.items.forEach(function(item) {
+            var origP = Number(item.originalPrice || item.price || 0);
+            var discP = Number(item.discountedPrice || origP);
+            var finalP = Number(item.finalPrice || discP);
+            var qty = Number(item.quantity || 1);
+            body += '<tr>' +
+                      '<td style="padding: 8px;">' + String(item.title || '') + '</td>' +
+                      '<td style="padding: 8px; text-align: center;">' + origP.toFixed(0) + '</td>' +
+                      '<td style="padding: 8px; text-align: center;">' + discP.toFixed(0) + '</td>' +
+                      '<td style="padding: 8px; text-align: center;">' + finalP.toFixed(0) + '</td>' +
+                      '<td style="padding: 8px; text-align: center;">' + qty.toFixed(0) + '</td>' +
+                      '<td style="padding: 8px; text-align: center;">' + (finalP * qty).toFixed(0) + '</td>' +
+                    '</tr>';
+          });
+        }
         
         body += '<tr style="font-weight: bold; background-color: #fcfcfc;">' +
                   '<td colspan="5" style="padding: 8px; text-align: right;">' + (labels['total_amount_label'] || 'المبلغ الإجمالي') + '</td>' +
-                  '<td style="padding: 8px; text-align: center;">' + totalAmount.toFixed(2) + ' ฿</td>' +
+                  '<td style="padding: 8px; text-align: center;">' + totalAmount.toFixed(0) + ' ฿</td>' +
                 '</tr>' +
               '</table>';
         
@@ -718,23 +725,26 @@ function sendEmailConfirmation(orderId, order, pdfFile) {
                                '<th style="padding: 10px; text-align: center;">' + (customerLabels['total_header'] || 'الإجمالي') + '</th>' +
                              '</tr>';
         
-        order.items.forEach(function(item) {
-          var origP = item.originalPrice || item.price || 0;
-          var discP = item.discountedPrice || origP;
-          var finalP = item.finalPrice || discP;
-          customerBody += '<tr>' +
-                            '<td style="padding: 8px;">' + item.title + '</td>' +
-                            '<td style="padding: 8px; text-align: center;">' + origP.toFixed(2) + ' ฿</td>' +
-                            '<td style="padding: 8px; text-align: center;">' + discP.toFixed(2) + ' ฿</td>' +
-                            '<td style="padding: 8px; text-align: center;">' + finalP.toFixed(2) + ' ฿</td>' +
-                            '<td style="padding: 8px; text-align: center;">' + item.quantity + '</td>' +
-                            '<td style="padding: 8px; text-align: center;">' + (finalP * item.quantity).toFixed(2) + ' ฿</td>' +
-                          '</tr>';
-        });
+        if (order.items && order.items.length > 0) {
+          order.items.forEach(function(item) {
+            var origP = Number(item.originalPrice || item.price || 0);
+            var discP = Number(item.discountedPrice || origP);
+            var finalP = Number(item.finalPrice || discP);
+            var qty = Number(item.quantity || 1);
+            customerBody += '<tr>' +
+                              '<td style="padding: 8px;">' + String(item.title || '') + '</td>' +
+                              '<td style="padding: 8px; text-align: center;">' + origP.toFixed(0) + ' ฿</td>' +
+                              '<td style="padding: 8px; text-align: center;">' + discP.toFixed(0) + ' ฿</td>' +
+                              '<td style="padding: 8px; text-align: center;">' + finalP.toFixed(0) + ' ฿</td>' +
+                              '<td style="padding: 8px; text-align: center;">' + qty.toFixed(0) + '</td>' +
+                              '<td style="padding: 8px; text-align: center;">' + (finalP * qty).toFixed(0) + ' ฿</td>' +
+                            '</tr>';
+          });
+        }
         
         customerBody += '<tr style="background-color: #e0f2fe; font-weight: bold;">' +
                           '<td colspan="5" style="padding: 10px; text-align: right;">' + (customerLabels['total_amount_label'] || 'الإجمالي الكلي') + '</td>' +
-                          '<td style="padding: 10px; text-align: center;">' + totalAmount.toFixed(2) + ' ฿</td>' +
+                          '<td style="padding: 10px; text-align: center;">' + totalAmount.toFixed(0) + ' ฿</td>' +
                         '</tr>' +
                       '</table>' +
                       '<hr>' +
@@ -796,22 +806,33 @@ function sendEmailHelper(to, subject, htmlBody, attachments) {
     return;
   }
   
+  var plainText = 'شكراً لتواصلك مع متجر النخبة للخط العربي الفاخر. تم استلام رسالتك وتفاصيل طلبك بنجاح. سنقوم بمتابعة طلبك والتواصل معك عبر الهاتف أو LINE قريباً جداً.';
+  
   var options = {
-    htmlBody: htmlBody
+    htmlBody: htmlBody,
+    name: 'متجر النخبة للخط العربي'
   };
   if (attachments && attachments.length > 0) {
     options.attachments = attachments;
   }
   
   try {
-    GmailApp.sendEmail(cleanTo, subject, '', options);
+    GmailApp.sendEmail(cleanTo, subject, plainText, options);
     Logger.log('تم إرسال الإيميل بنجاح عبر GmailApp إلى: ' + cleanTo);
   } catch (e) {
     Logger.log('فشل الإرسال عبر GmailApp: ' + e.message + '. جاري المحاولة عبر MailApp...');
     try {
-      options.to = cleanTo;
-      options.subject = subject;
-      MailApp.sendEmail(options);
+      var mailOptions = {
+        to: cleanTo,
+        subject: subject,
+        body: plainText,
+        htmlBody: htmlBody,
+        name: 'متجر النخبة للخط العربي'
+      };
+      if (attachments && attachments.length > 0) {
+        mailOptions.attachments = attachments;
+      }
+      MailApp.sendEmail(mailOptions);
       Logger.log('تم إرسال الإيميل بنجاح عبر MailApp إلى: ' + cleanTo);
     } catch (e2) {
       Logger.log('فشل الإرسال كلياً: ' + e2.message);

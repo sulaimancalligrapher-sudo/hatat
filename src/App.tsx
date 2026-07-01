@@ -18,8 +18,10 @@ export default function App() {
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
 
   // Connection State
+  const DEFAULT_SHEETS_URL = 'https://script.google.com/macros/s/AKfycbzUMSq6h2yw3WJ3bdQQIpdg73KitSP9Auf66yAAJs3s9ZUSnTtUlvovCFt0Q99WdMLMlQ/exec';
+
   const [sheetsUrl, setSheetsUrl] = useState<string>(() => {
-    return localStorage.getItem('sheets_api_url') || '';
+    return localStorage.getItem('sheets_api_url') || DEFAULT_SHEETS_URL;
   });
   const [isDemoMode, setIsDemoMode] = useState(true);
 
