@@ -226,8 +226,10 @@ function getSettings() {
   var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
   var settingsSheet = spreadsheet.getSheetByName(\'Settings\');
   if (!settingsSheet) return {};
-  var lastRow = settingsSheet.getLastRow();
-  var data = settingsSheet.getRange(\'A2:F\' + lastRow).getValues();
+  
+  // نستخدم نطاقاً ثابتاً (مثلاً حتى الصف 100) لضمان عدم حدوث أي قطع للمصفوفة
+  // بسبب وجود صفوف فارغة في الأسفل، مما يضمن قراءة الخلايا B16 و B17 والكلمات المفتاحية في العمود F بالكامل
+  var data = settingsSheet.getRange(\'A2:F100\').getValues();
   
   var settings = {
     headerImageUrl: data[0] && data[0][1] ? data[0][1].toString().trim() : \'\',
@@ -454,8 +456,11 @@ function submitOrder(order) {
     if (pdfResult && pdfResult.status === \'success\') {
       pdfLink = pdfResult.pdfUrl;
       pdfFile = pdfResult.file;
+    } else if (pdfResult && pdfResult.status === \'error\') {
+      pdfLink = \'فشل: \' + pdfResult.message;
     }
   } catch (e) {
+    pdfLink = \'خطأ: \' + e.message;
     Logger.log(\'خطأ في توليد الـ PDF: \' + e.message);
   }
   
@@ -490,16 +495,20 @@ function generateAndSavePDF(orderId, order) {
   try {
     var settings = getSettings();
     if (!settings.templateId || !settings.folderUrl) {
-      return { status: \'error\', message: \'قالب الفاتورة أو المجلد غير مهيأ\' };
+      return { status: \'error\', message: \'قالب الفاتورة أو المجلد غير مهيأ في الإعدادات\' };
     }
     
-    var folderIdMatch = settings.folderUrl.match(/folders\\/([a-zA-Z0-9_-]+)/) || settings.folderUrl.match(/[-\\w]{25,}/);
-    if (!folderIdMatch) {
-      return { status: \'error\', message: \'رابط مجلد الحفظ غير صالح\' };
-    }
-    var folderId = folderIdMatch[1] || folderIdMatch[0];
+    var templateId = extractIdFromUrl(settings.templateId);
+    var folderId = extractIdFromUrl(settings.folderUrl);
     
-    var tempDoc = DriveApp.getFileById(settings.templateId).makeCopy(\'Temp_Bill_\' + orderId, DriveApp.getFolderById(folderId));
+    if (!templateId) {
+      return { status: \'error\', message: \'معرف قالب الفاتورة غير صالح أو فارغ\' };
+    }
+    if (!folderId) {
+      return { status: \'error\', message: \'معرف مجلد الحفظ غير صالح أو فارغ\' };
+    }
+    
+    var tempDoc = DriveApp.getFileById(templateId).makeCopy(\'Temp_Bill_\' + orderId, DriveApp.getFolderById(folderId));
     var doc = DocumentApp.openById(tempDoc.getId());
     var body = doc.getBody();
     
@@ -509,10 +518,13 @@ function generateAndSavePDF(orderId, order) {
     body.replaceText(\'{{address}}\', order.address || \'\');
     body.replaceText(\'{{email}}\', order.email || \'\');
     
-    var total = order.items.reduce((sum, item) => sum + ((item.finalPrice || item.discountedPrice || item.price || 0) * item.quantity), 0);
+    var items = order.items || [];
+    var total = items.reduce(function(sum, item) {
+      return sum + ((item.finalPrice || item.discountedPrice || item.price || 0) * (item.quantity || 1));
+    }, 0);
     body.replaceText(\'{{totalAmount}}\', total.toFixed(2));
     
-    var tableText = order.items.map(function(item) {
+    var tableText = items.map(function(item) {
       return (item.title || \'غير معروف\') + \' (x\' + (item.quantity || 1) + \') - \' + ((item.finalPrice || item.discountedPrice || item.price || 0) * (item.quantity || 1)).toFixed(2) + \' ฿\';
     }).join(\'\\n\');
     body.replaceText(\'{{items}}\', tableText);
@@ -528,6 +540,37 @@ function generateAndSavePDF(orderId, order) {
     Logger.log(\'PDF Generation Error: \' + e.message);
     return { status: \'error\', message: e.message };
   }
+}
+
+function extractIdFromUrl(urlOrId) {
+  if (!urlOrId) return \'\';
+  urlOrId = String(urlOrId).trim();
+  
+  // If it\'s a URL with "/folders/"
+  var foldersMatch = urlOrId.match(/\\/folders\\/([a-zA-Z0-9_-]+)/);
+  if (foldersMatch && foldersMatch[1]) {
+    return foldersMatch[1];
+  }
+  
+  // If it\'s a URL with "/d/"
+  var dMatch = urlOrId.match(/\\/d\\/([a-zA-Z0-9_-]+)/);
+  if (dMatch && dMatch[1]) {
+    return dMatch[1];
+  }
+  
+  // If it\'s a URL with "?id="
+  var idParamMatch = urlOrId.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  if (idParamMatch && idParamMatch[1]) {
+    return idParamMatch[1];
+  }
+  
+  // Fallback to finding any contiguous 25+ char alphanumeric sequence
+  var sequenceMatch = urlOrId.match(/[-\\w]{25,}/);
+  if (sequenceMatch && sequenceMatch[0]) {
+    return sequenceMatch[0];
+  }
+  
+  return urlOrId;
 }
 
 // إعداد وصياغة محتوى البريد الإلكتروني للعميل والمدير بأعلى احترافية وأمان
