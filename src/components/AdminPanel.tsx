@@ -201,10 +201,7 @@ function registerMember(data) {
   
   // إرسال البريد الترحيبي
   try {
-    MailApp.sendEmail({
-      to: data.email,
-      subject: 'مرحباً بك في نادي النخبة للخط العربي! 🎉',
-      htmlBody: \`
+    sendEmailHelper(data.email, 'مرحباً بك في نادي النخبة للخط العربي! 🎉', \`
         <div dir="rtl" style="font-family: 'Cairo', 'Segoe UI', Tahoma, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e5e5e5; border-radius: 16px; padding: 24px; background-color: #fcfbfa; color: #1c1917;">
           <div style="text-align: center; margin-bottom: 24px; border-bottom: 2px solid #d6bf77; padding-bottom: 16px;">
             <h2 style="color: #1c1917; font-family: serif; font-size: 24px; margin: 0;">أهلاً بك في نادي النخبة للخط العربي الفاخر ✨</h2>
@@ -224,9 +221,7 @@ function registerMember(data) {
             <p style="margin: 0;">شكراً لاهتمامكم بالفن الأصيل ❤️</p>
           </div>
         </div>
-      \`
-    });
-    Logger.log('تم إرسال الإيميل الترحيبي بنجاح إلى: ' + data.email);
+      \`);
   } catch (e) {
     Logger.log('فشل إرسال الإيميل الترحيبي: ' + e.message);
   }
@@ -594,114 +589,350 @@ function generateInvoicePDF(orderId, order) {
   }
 }
 
-// صياغة وإرسال البريد الإلكتروني الأنيق لتأكيد الطلب
+// صياغة وإرسال البريد الإلكتروني للمشرف وللعميل بالاعتماد على جداول البيانات وقالب الإيميل الخاص بالمستخدم
 function sendEmailConfirmation(orderId, order, pdfFile) {
   try {
-    if (!order.email) {
-      Logger.log('لا يوجد بريد إلكتروني للزبون لإرسال الفاتورة');
-      return;
-    }
-    
+    var settings = getSettings();
     var timestamp = Utilities.formatDate(new Date(), 'GMT+7', 'yyyy-MM-dd HH:mm:ss');
+    var promoCode = order.promoCode || '';
+    
     var totalAmount = order.items.reduce(function(sum, item) {
       var price = item.finalPrice || item.discountedPrice || item.price || 0;
       return sum + (price * item.quantity);
-    }, 0).toFixed(2);
-    
-    var itemsTableRows = order.items.map(function(item) {
-      var price = (item.finalPrice || item.discountedPrice || item.price || 0).toFixed(2);
-      var itemTotal = ((item.finalPrice || item.discountedPrice || item.price || 0) * item.quantity).toFixed(2);
-      return \`
-        <tr>
-          <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: right;">\${item.title}</td>
-          <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center;">\${item.quantity}</td>
-          <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: left;">\${price} ฿</td>
-          <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: left; font-weight: bold;">\${itemTotal} ฿</td>
-        </tr>
-      \`;
-    }).join('');
+    }, 0);
 
-    var emailBody = \`
-      <div dir="rtl" style="font-family: 'Cairo', 'Segoe UI', Tahoma, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e5e5e5; border-radius: 16px; padding: 24px; background-color: #fcfbfa; color: #1c1917;">
-        <div style="text-align: center; margin-bottom: 24px; border-bottom: 2px solid #d6bf77; padding-bottom: 16px;">
-          <h2 style="color: #1c1917; font-family: serif; font-size: 24px; margin: 0;">متجر النخبة للخط العربي والزخرفة الإسلامية ✨</h2>
-          <p style="color: #78716c; font-size: 14px; margin: 5px 0 0 0;">تأكيد استلام طلب الشراء وتفاصيل الفاتورة</p>
-        </div>
+    // 1. إرسال البريد الإلكتروني للمشرف (صاحب المتجر)
+    if (settings.recipientEmail) {
+      try {
+        var emailData = getEmailContent();
+        var labels = emailData.labels || {};
+        var defaultNoPromo = labels['no_promo_code'] || 'غير مستخدم';
+        var defaultAdditionalTitle = labels['additional_content_title'] || 'محتوى إضافي';
+        var subject = labels['new_order_subject'] || ('طلب جديد: ' + orderId);
         
-        <h3 style="color: #1c1917; font-size: 18px; margin-top: 0;">شكراً لثقتك وتسوقك معنا! 🎉</h3>
-        <p>عزيزنا <strong>\${order.name}</strong>، يسعدنا إبلاغك بأنه قد تم تسجيل طلبك بنجاح وسنقوم بالتواصل معك قريباً لشحن طلبك.</p>
+        var body = '<h2>' + (labels['order_details_title'] || 'تفاصيل الطلب') + '</h2>' +
+                   '<p><strong>' + (labels['order_id_label'] || 'رقم الطلب:') + '</strong> ' + orderId + '</p>' +
+                   '<p><strong>' + (labels['timestamp_label'] || 'الوقت:') + '</strong> ' + timestamp + '</p>' +
+                   '<p><strong>' + (labels['customer_name_label'] || 'اسم العميل:') + '</strong> ' + order.name + '</p>' +
+                   '<p><strong>' + (labels['address_label'] || 'العنوان:') + '</strong> ' + order.address + '</p>' +
+                   '<p><strong>' + (labels['phone_label'] || 'رقم الهاتف:') + '</strong> ' + order.phone + '</p>' +
+                   '<p><strong>' + (labels['email_label'] || 'البريد الإلكتروني:') + '</strong> ' + order.email + '</p>' +
+                   '<p><strong>' + (labels['promo_code_label'] || 'الكود الترويجي:') + '</strong> ' + (promoCode || defaultNoPromo) + '</p>' +
+                   '<h3>' + (labels['products_title'] || 'المنتجات:') + '</h3>' +
+                   '<table border="1" style="border-collapse: collapse; width: 100%; text-align: right;" dir="rtl">' +
+                     '<tr style="background-color: #f2f2f2;">' +
+                       '<th style="padding: 8px;">' + (labels['product_header'] || 'المنتج') + '</th>' +
+                       '<th style="padding: 8px; text-align: center;">' + (labels['original_price_header'] || 'السعر الأصلي (฿)') + '</th>' +
+                       '<th style="padding: 8px; text-align: center;">' + (labels['discounted_price_header'] || 'السعر بعد الخصم (฿)') + '</th>' +
+                       '<th style="padding: 8px; text-align: center;">' + (labels['promo_price_header'] || 'السعر بعد الترويج (฿)') + '</th>' +
+                       '<th style="padding: 8px; text-align: center;">' + (labels['quantity_header'] || 'الكمية') + '</th>' +
+                       '<th style="padding: 8px; text-align: center;">' + (labels['total_header'] || 'الإجمالي (฿)') + '</th>' +
+                     '</tr>';
         
-        <div style="background-color: #f5f4f0; border-right: 4px solid #d6bf77; padding: 12px 16px; margin: 20px 0; border-radius: 4px;">
-          <p style="margin: 0 0 6px 0; font-size: 13px; color: #78716c;">رقم الفاتورة المميز:</p>
-          <p style="margin: 0; font-family: monospace; font-size: 18px; font-weight: bold; color: #1c1917;">\${orderId}</p>
-        </div>
+        order.items.forEach(function(item) {
+          var origP = item.originalPrice || item.price || 0;
+          var discP = item.discountedPrice || origP;
+          var finalP = item.finalPrice || discP;
+          body += '<tr>' +
+                    '<td style="padding: 8px;">' + item.title + '</td>' +
+                    '<td style="padding: 8px; text-align: center;">' + origP.toFixed(2) + '</td>' +
+                    '<td style="padding: 8px; text-align: center;">' + discP.toFixed(2) + '</td>' +
+                    '<td style="padding: 8px; text-align: center;">' + finalP.toFixed(2) + '</td>' +
+                    '<td style="padding: 8px; text-align: center;">' + item.quantity + '</td>' +
+                    '<td style="padding: 8px; text-align: center;">' + (finalP * item.quantity).toFixed(2) + '</td>' +
+                  '</tr>';
+        });
         
-        <h4 style="border-bottom: 1px solid #d6bf77; padding-bottom: 8px; color: #1c1917; margin-bottom: 12px;">تفاصيل الشحن والعميل</h4>
-        <table style="width: 100%; border-collapse: collapse; font-size: 14px; margin-bottom: 20px;">
-          <tr>
-            <td style="padding: 6px 0; color: #78716c; width: 30%;">تاريخ الطلب:</td>
-            <td style="padding: 6px 0; font-weight: bold;">\${timestamp}</td>
-          </tr>
-          <tr>
-            <td style="padding: 6px 0; color: #78716c;">اسم العميل:</td>
-            <td style="padding: 6px 0; font-weight: bold;">\${order.name}</td>
-          </tr>
-          <tr>
-            <td style="padding: 6px 0; color: #78716c;">رقم الهاتف:</td>
-            <td style="padding: 6px 0; font-weight: bold;">\${order.phone}</td>
-          </tr>
-          <tr>
-            <td style="padding: 6px 0; color: #78716c;">العنوان الكامل:</td>
-            <td style="padding: 6px 0; font-weight: bold;">\${order.address}</td>
-          </tr>
-        </table>
+        body += '<tr style="font-weight: bold; background-color: #fcfcfc;">' +
+                  '<td colspan="5" style="padding: 8px; text-align: right;">' + (labels['total_amount_label'] || 'المبلغ الإجمالي') + '</td>' +
+                  '<td style="padding: 8px; text-align: center;">' + totalAmount.toFixed(2) + ' ฿</td>' +
+                '</tr>' +
+              '</table>';
         
-        <h4 style="border-bottom: 1px solid #d6bf77; padding-bottom: 8px; color: #1c1917; margin-bottom: 12px;">المنتجات المطلوبة</h4>
-        <table style="width: 100%; border-collapse: collapse; font-size: 14px; margin-bottom: 20px;">
-          <thead>
-            <tr style="background-color: #f5f4f0;">
-              <th style="padding: 10px; text-align: right; border-bottom: 2px solid #d6bf77;">المنتج</th>
-              <th style="padding: 10px; text-align: center; border-bottom: 2px solid #d6bf77;">الكمية</th>
-              <th style="padding: 10px; text-align: left; border-bottom: 2px solid #d6bf77;">السعر</th>
-              <th style="padding: 10px; text-align: left; border-bottom: 2px solid #d6bf77;">الإجمالي</th>
-            </tr>
-          </thead>
-          <tbody>
-            \${itemsTableRows}
-          </tbody>
-          <tfoot>
-            <tr>
-              <td colspan="3" style="padding: 12px 10px; text-align: right; font-weight: bold; font-size: 16px;">الإجمالي الكلي:</td>
-              <td style="padding: 12px 10px; text-align: left; font-weight: bold; font-size: 16px; color: #c5a850; border-top: 2px solid #d6bf77;">\${totalAmount} ฿</td>
-            </tr>
-          </tfoot>
-        </table>
+        var emailContent = emailData.additionalContent || [];
+        var attachments = [];
         
-        \${pdfFile ? \`<p style="font-size: 13px; color: #78716c; text-align: center; margin-top: 20px;">📌 لقد تم إرفاق نسخة رسمية من الفاتورة بصيغة PDF مع هذه الرسالة للرجوع إليها لاحقاً.</p>\` : ''}
+        // إرفاق الفاتورة الحالية للمشرف
+        if (pdfFile) {
+          try {
+            attachments.push(pdfFile.getBlob());
+          } catch (blobErr) {
+            Logger.log('خطأ في إرفاق ملف PDF لإيميل المشرف: ' + blobErr.message);
+          }
+        }
         
-        <div style="text-align: center; margin-top: 32px; padding-top: 16px; border-top: 1px dashed #d6bf77; font-size: 12px; color: #78716c;">
-          <p style="margin: 0;">هذه الرسالة مرسلة بشكل تلقائي من متجر النخبة للخط العربي الفاخر.</p>
-          <p style="margin: 4px 0 0 0;">شكراً لاهتمامكم بالفن الأصيل ❤️</p>
-        </div>
-      </div>
-    \`;
-    
-    var mailOptions = {
-      to: order.email,
-      subject: 'تأكيد طلبك رقم ' + orderId + ' من متجر النخبة 🧾',
-      htmlBody: emailBody
-    };
-    
-    if (pdfFile) {
-      mailOptions.attachments = [pdfFile.getBlob()];
+        if (emailContent.length > 0) {
+          body += '<h3>' + defaultAdditionalTitle + '</h3>';
+          emailContent.forEach(function(item) {
+            if (item.type === 'text') {
+              body += '<p><strong>' + item.description + ':</strong> ' + item.content + '</p>';
+            } else if (item.type === 'image') {
+              body += '<p><strong>' + item.description + ':</strong></p>' +
+                      '<img src="https://drive.google.com/thumbnail?id=' + item.fileId + '" alt="' + item.description + '" style="max-width: 600px; height: auto;">';
+            } else if (item.type === 'pdf') {
+              try {
+                var file = DriveApp.getFileById(item.fileId);
+                attachments.push(file.getBlob());
+                body += '<p><strong>' + item.description + ':</strong> ' + (labels['pdf_attached'] || 'مرفق كملف PDF') + '</p>';
+              } catch (e) {
+                Logger.log('خطأ في إرفاق ملف PDF إضافي للمشرف: ' + e.message);
+                body += '<p><strong>' + item.description + ':</strong> ' + (labels['pdf_error'] || 'خطأ في إرفاق الملف: ') + e.message + '</p>';
+              }
+            }
+          });
+        }
+        
+        sendEmailHelper(settings.recipientEmail, subject, body, attachments);
+      } catch (adminErr) {
+        Logger.log('خطأ في إرسال إيميل المشرف: ' + adminErr.message);
+      }
     }
     
-    MailApp.sendEmail(mailOptions);
-    Logger.log('تم إرسال إيميل تأكيد الطلب بنجاح إلى: ' + order.email);
+    // 2. إرسال البريد الإلكتروني لتأكيد الطلب للزبون
+    var targetCustomerEmail = String(order.email || '').trim();
+    if (targetCustomerEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(targetCustomerEmail)) {
+      try {
+        var customerEmailData = getCustomerEmailContent();
+        var customerLabels = customerEmailData.labels || {};
+        var customerNoPromo = customerLabels['no_promo_code'] || 'غير مستخدم';
+        var customerAdditionalTitle = customerLabels['additional_content_title'] || 'معلومات إضافية';
+        var customerSubject = customerLabels['confirmation_subject'] || ('تأكيد طلبك رقم: ' + orderId);
+        
+        var customerBody = '<h2>' + (customerLabels['thank_you_title'] || 'شكرًا لتسوقك معنا! 🎉') + '</h2>' +
+                           '<p>' + (customerLabels['order_received_message'] || 'تم استلام طلبك بنجاح. إليك تفاصيل طلبك:') + '</p>' +
+                           '<hr>' +
+                           '<p><strong>' + (customerLabels['order_id_label'] || 'رقم الطلب:') + '</strong> ' + orderId + '</p>' +
+                           '<p><strong>' + (customerLabels['timestamp_label'] || 'الوقت:') + '</strong> ' + timestamp + '</p>' +
+                           '<p><strong>' + (customerLabels['customer_name_label'] || 'اسمك:') + '</strong> ' + order.name + '</p>' +
+                           '<p><strong>' + (customerLabels['address_label'] || 'العنوان:') + '</strong> ' + order.address + '</p>' +
+                           '<p><strong>' + (customerLabels['phone_label'] || 'رقم الهاتف:') + '</strong> ' + order.phone + '</p>' +
+                           '<p><strong>' + (customerLabels['promo_code_label'] || 'الكود الترويجي:') + '</strong> ' + (promoCode || customerNoPromo) + '</p>' +
+                           '<h3>' + (customerLabels['products_title'] || 'المنتجات:') + '</h3>' +
+                           '<table border="1" style="width:100%; border-collapse: collapse; direction: rtl; text-align: right;">' +
+                             '<tr style="background-color: #f4f4f4;">' +
+                               '<th style="padding: 10px;">' + (customerLabels['product_header'] || 'المنتج') + '</th>' +
+                               '<th style="padding: 10px; text-align: center;">' + (customerLabels['original_price_header'] || 'السعر الأصلي') + '</th>' +
+                               '<th style="padding: 10px; text-align: center;">' + (customerLabels['discounted_price_header'] || 'السعر بعد الخصم') + '</th>' +
+                               '<th style="padding: 10px; text-align: center;">' + (customerLabels['final_price_header'] || 'السعر النهائي') + '</th>' +
+                               '<th style="padding: 10px; text-align: center;">' + (customerLabels['quantity_header'] || 'الكمية') + '</th>' +
+                               '<th style="padding: 10px; text-align: center;">' + (customerLabels['total_header'] || 'الإجمالي') + '</th>' +
+                             '</tr>';
+        
+        order.items.forEach(function(item) {
+          var origP = item.originalPrice || item.price || 0;
+          var discP = item.discountedPrice || origP;
+          var finalP = item.finalPrice || discP;
+          customerBody += '<tr>' +
+                            '<td style="padding: 8px;">' + item.title + '</td>' +
+                            '<td style="padding: 8px; text-align: center;">' + origP.toFixed(2) + ' ฿</td>' +
+                            '<td style="padding: 8px; text-align: center;">' + discP.toFixed(2) + ' ฿</td>' +
+                            '<td style="padding: 8px; text-align: center;">' + finalP.toFixed(2) + ' ฿</td>' +
+                            '<td style="padding: 8px; text-align: center;">' + item.quantity + '</td>' +
+                            '<td style="padding: 8px; text-align: center;">' + (finalP * item.quantity).toFixed(2) + ' ฿</td>' +
+                          '</tr>';
+        });
+        
+        customerBody += '<tr style="background-color: #e0f2fe; font-weight: bold;">' +
+                          '<td colspan="5" style="padding: 10px; text-align: right;">' + (customerLabels['total_amount_label'] || 'الإجمالي الكلي') + '</td>' +
+                          '<td style="padding: 10px; text-align: center;">' + totalAmount.toFixed(2) + ' ฿</td>' +
+                        '</tr>' +
+                      '</table>' +
+                      '<hr>' +
+                      '<p>' + (customerLabels['contact_message'] || 'سنتواصل معك عبر LINE أو الهاتف لتأكيد التفاصيل وتوصيل الطلب.') + '</p>' +
+                      '<p>' + (customerLabels['inquiry_message'] || 'لأي استفسار، تواصل معنا عبر:') + '</p>' +
+                      '<ul>' +
+                        '<li>' + (customerLabels['line_label'] || 'LINE:') + ' ' + (settings.lineUrl ? ('<a href="' + settings.lineUrl + '">' + (customerLabels['line_click_here'] || 'اضغط هنا') + '</a>') : (customerLabels['line_not_available'] || 'غير متوفر')) + '</li>' +
+                        '<li>' + (customerLabels['mobile_label'] || 'الجوال:') + ' ' + order.phone + '</li>' +
+                      '</ul>' +
+                      '<p style="color: #059669; font-weight: bold;">' + (customerLabels['thank_you_message'] || 'شكرًا لثقتك بنا!') + '</p>';
+        
+        var customerEmailContent = customerEmailData.additionalContent || [];
+        var customerAttachments = [];
+        
+        // إرفاق الفاتورة الحالية للزبون
+        if (pdfFile) {
+          try {
+            customerAttachments.push(pdfFile.getBlob());
+          } catch (blobErr) {
+            Logger.log('خطأ في إرفاق ملف PDF لإيميل العميل: ' + blobErr.message);
+          }
+        }
+        
+        if (customerEmailContent.length > 0) {
+          customerBody += '<h3>' + customerAdditionalTitle + '</h3>';
+          customerEmailContent.forEach(function(item) {
+            if (item.type === 'text') {
+              customerBody += '<p><strong>' + item.description + ':</strong> ' + item.content + '</p>';
+            } else if (item.type === 'image') {
+              customerBody += '<p><strong>' + item.description + ':</strong></p>' +
+                              '<img src="https://drive.google.com/thumbnail?id=' + item.fileId + '" alt="' + item.description + '" style="max-width: 100%; height: auto; border-radius: 8px;">';
+            } else if (item.type === 'pdf') {
+              try {
+                var file = DriveApp.getFileById(item.fileId);
+                customerAttachments.push(file.getBlob());
+                customerBody += '<p><strong>' + item.description + ':</strong> ' + (customerLabels['pdf_attached'] || 'مرفق كملف PDF') + '</p>';
+              } catch (e) {
+                Logger.log('خطأ في إرفاق PDF إضافي للعميل: ' + e.message);
+                customerBody += '<p><strong>' + item.description + ':</strong> ' + (customerLabels['pdf_error'] || 'خطأ في إرفاق الملف: ') + e.message + '</p>';
+              }
+            }
+          });
+        }
+        
+        sendEmailHelper(targetCustomerEmail, customerSubject, customerBody, customerAttachments);
+      } catch (custErr) {
+        Logger.log('خطأ في إرسال إيميل العميل: ' + custErr.message);
+      }
+    }
   } catch (err) {
-    Logger.log('خطأ أثناء إرسال إيميل تأكيد الطلب: ' + err.message);
+    Logger.log('خطأ كلي في نظام البريد: ' + err.message);
   }
-}`;
+}
+
+function sendEmailHelper(to, subject, htmlBody, attachments) {
+  var cleanTo = String(to || '').trim();
+  if (!cleanTo) {
+    Logger.log('إلغاء الإرسال: الإيميل فارغ');
+    return;
+  }
+  
+  var options = {
+    htmlBody: htmlBody
+  };
+  if (attachments && attachments.length > 0) {
+    options.attachments = attachments;
+  }
+  
+  try {
+    GmailApp.sendEmail(cleanTo, subject, '', options);
+    Logger.log('تم إرسال الإيميل بنجاح عبر GmailApp إلى: ' + cleanTo);
+  } catch (e) {
+    Logger.log('فشل الإرسال عبر GmailApp: ' + e.message + '. جاري المحاولة عبر MailApp...');
+    try {
+      options.to = cleanTo;
+      options.subject = subject;
+      MailApp.sendEmail(options);
+      Logger.log('تم إرسال الإيميل بنجاح عبر MailApp إلى: ' + cleanTo);
+    } catch (e2) {
+      Logger.log('فشل الإرسال كلياً: ' + e2.message);
+    }
+  }
+}
+
+function extractFileId(url) {
+  var regex = /\/d\/([a-zA-Z0-9_-]+)/;
+  var match = String(url).match(regex);
+  return match && match[1] ? match[1] : null;
+}
+
+function getEmailContent() {
+  try {
+    var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+    var emailSheet = spreadsheet.getSheetByName('Email');
+    if (!emailSheet) {
+      Logger.log('ورقة Email غير موجودة، سيتم إنشاؤها');
+      emailSheet = spreadsheet.insertSheet('Email');
+      emailSheet.getRange('A1:C1').setValues([['Type', 'Content/Link', 'Description']]);
+      return { additionalContent: [], labels: {} };
+    }
+    var lastRow = emailSheet.getLastRow();
+    if (lastRow < 2) {
+      Logger.log('ورقة Email فارغة');
+      return { additionalContent: [], labels: {} };
+    }
+    var range = emailSheet.getRange('A2:C' + lastRow);
+    var values = range.getValues();
+    var additionalContent = [];
+    var labels = {};
+    for (var i = 0; i < values.length; i++) {
+      var type = values[i][0] ? values[i][0].toString().trim().toLowerCase() : '';
+      var content = values[i][1] ? values[i][1].toString().trim() : '';
+      var description = values[i][2] ? values[i][2].toString().trim() : '';
+      if (type && content) {
+        if (type === 'label') {
+          labels[description] = content;
+        } else if (type === 'image' || type === 'pdf') {
+          var fileId = extractFileId(content);
+          if (!fileId) {
+            Logger.log('رابط غير صالح في ورقة Email، الصف ' + (i + 2) + ': ' + content);
+            continue;
+          }
+          additionalContent.push({
+            type: type,
+            fileId: fileId,
+            description: description || 'مرفق إضافي'
+          });
+        } else if (type === 'text') {
+          additionalContent.push({
+            type: type,
+            content: content,
+            description: description || 'نص إضافي'
+          });
+        }
+      }
+    }
+    Logger.log('Email content and labels retrieved: ' + JSON.stringify({ additionalContent: additionalContent, labels: labels }));
+    return { additionalContent: additionalContent, labels: labels };
+  } catch (error) {
+    Logger.log('Error retrieving email content and labels: ' + error);
+    return { additionalContent: [], labels: {} };
+  }
+}
+
+function getCustomerEmailContent() {
+  try {
+    var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+    var emailSheet = spreadsheet.getSheetByName('Email-Customer');
+    if (!emailSheet) {
+      Logger.log('ورقة Email-Customer غير موجودة، سيتم إنشاؤها');
+      emailSheet = spreadsheet.insertSheet('Email-Customer');
+      emailSheet.getRange('A1:C1').setValues([['Type', 'Content/Link', 'Description']]);
+      return { additionalContent: [], labels: {} };
+    }
+    var lastRow = emailSheet.getLastRow();
+    if (lastRow < 2) {
+      Logger.log('ورقة Email-Customer فارغة');
+      return { additionalContent: [], labels: {} };
+    }
+    var range = emailSheet.getRange('A2:C' + lastRow);
+    var values = range.getValues();
+    var additionalContent = [];
+    var labels = {};
+    for (var i = 0; i < values.length; i++) {
+      var type = values[i][0] ? values[i][0].toString().trim().toLowerCase() : '';
+      var content = values[i][1] ? values[i][1].toString().trim() : '';
+      var description = values[i][2] ? values[i][2].toString().trim() : '';
+      if (type && content) {
+        if (type === 'label') {
+          labels[description] = content;
+        } else if (type === 'image' || type === 'pdf') {
+          var fileId = extractFileId(content);
+          if (!fileId) {
+            Logger.log('رابط غير صالح في ورقة Email-Customer، الصف ' + (i + 2) + ': ' + content);
+            continue;
+          }
+          additionalContent.push({
+            type: type,
+            fileId: fileId,
+            description: description || 'مرفق إضافي'
+          });
+        } else if (type === 'text') {
+          additionalContent.push({
+            type: type,
+            content: content,
+            description: description || 'نص إضافي'
+          });
+        }
+      }
+    }
+    Logger.log('Customer email content and labels retrieved: ' + JSON.stringify({ additionalContent: additionalContent, labels: labels }));
+    return { additionalContent: additionalContent, labels: labels };
+  } catch (error) {
+    Logger.log('Error retrieving customer email content and labels: ' + error);
+    return { additionalContent: [], labels: {} };
+  }
+}
+`;
 
     navigator.clipboard.writeText(appsScriptCode);
     alert('تم نسخ الكود بنجاح! يمكنك الآن لصقه في Google Apps Script.');

@@ -478,7 +478,7 @@ export default function App() {
                   </span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-6">
                   {discountedProducts.map((prod) => (
                     <ProductCard
                       key={prod.fileId}
@@ -536,7 +536,7 @@ export default function App() {
                 <p className="text-stone-400 text-xs mt-1">يرجى تجربة كلمات بحث أخرى أو تصفح قسم آخر</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-6">
                 {filteredProducts.map((prod) => (
                   <ProductCard
                     key={prod.fileId}

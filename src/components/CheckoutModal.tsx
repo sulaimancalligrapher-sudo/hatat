@@ -105,10 +105,10 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     try {
       // Build order payload
       const orderPayload = {
-        name: formData.name,
-        address: formData.address + (formData.lineId ? ` (LINE ID: ${formData.lineId})` : ''),
-        phone: formData.phone,
-        email: formData.email,
+        name: formData.name.trim(),
+        address: formData.address.trim() + (formData.lineId.trim() ? ` (LINE ID: ${formData.lineId.trim()})` : ''),
+        phone: formData.phone.trim(),
+        email: formData.email.trim(),
         promoCode: appliedPromo ? appliedPromo.code : ''
       };
 

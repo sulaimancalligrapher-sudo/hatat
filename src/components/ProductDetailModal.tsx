@@ -16,6 +16,25 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   isInCart
 }) => {
   const [activeMediaIndex, setActiveMediaIndex] = useState(0);
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchStartX(e.touches[0].clientX);
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX === null) return;
+    const touchEndX = e.changedTouches[0].clientX;
+    const diffX = touchStartX - touchEndX;
+
+    // Minimum swipe distance of 40px to trigger swipe
+    if (diffX > 40) {
+      nextMedia();
+    } else if (diffX < -40) {
+      prevMedia();
+    }
+    setTouchStartX(null);
+  };
 
   // Combine main image, extra images, and videos into a single list
   const mediaList: { type: 'image' | 'video'; id: string; provider?: 'youtube' | 'drive' }[] = [
@@ -63,7 +82,11 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
         </button>
 
         {/* Media Carousel Area (Left side on desktop) */}
-        <div className="relative w-full md:w-1/2 bg-stone-950 flex flex-col justify-between p-4 min-h-[350px] md:min-h-0">
+        <div 
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+          className="relative w-full md:w-1/2 bg-stone-950 flex flex-col justify-between p-4 min-h-[350px] md:min-h-0 select-none cursor-grab active:cursor-grabbing"
+        >
           <div className="flex-grow flex items-center justify-center">
             {activeMedia.type === 'image' ? (
               <img
@@ -113,16 +136,21 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
 
           {/* Carousel Thumbnail Dots */}
           {mediaList.length > 1 && (
-            <div className="flex justify-center gap-1.5 mt-3 overflow-x-auto py-1">
-              {mediaList.map((media, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => setActiveMediaIndex(idx)}
-                  className={`h-2 rounded-full transition-all cursor-pointer ${
-                    activeMediaIndex === idx ? 'w-6 bg-gold-400' : 'w-2 bg-stone-600 hover:bg-stone-500'
-                  }`}
-                />
-              ))}
+            <div className="flex flex-col items-center gap-1.5 mt-3">
+              <div className="flex justify-center gap-1.5 overflow-x-auto py-1 w-full">
+                {mediaList.map((media, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setActiveMediaIndex(idx)}
+                    className={`h-2 rounded-full transition-all cursor-pointer ${
+                      activeMediaIndex === idx ? 'w-6 bg-gold-400' : 'w-2 bg-stone-600 hover:bg-stone-500'
+                    }`}
+                  />
+                ))}
+              </div>
+              <div className="text-[10px] text-gold-500/80 font-medium md:hidden animate-pulse select-none">
+                ← اسحب لليمين أو اليسار للتنقل بين الصور →
+              </div>
             </div>
           )}
         </div>

@@ -65,23 +65,29 @@ export const ProductCard: React.FC<ProductCardProps> = ({
       </div>
 
       {/* Content Section */}
-      <div className="p-5 flex flex-col flex-grow">
-        <h3 className="font-serif text-lg font-bold text-stone-900 mb-2 group-hover:text-gold-600 transition-colors line-clamp-1">
+      <div className="p-3.5 md:p-5 flex flex-col flex-grow">
+        <h3 
+          onClick={() => onViewDetails(product)}
+          className="font-serif text-sm md:text-lg font-bold text-stone-900 mb-1 md:mb-2 group-hover:text-gold-600 transition-colors line-clamp-1 cursor-pointer"
+        >
           {product.title}
         </h3>
         
-        <p className="text-stone-500 text-sm mb-4 line-clamp-2 flex-grow">
+        <p 
+          onClick={() => onViewDetails(product)}
+          className="text-stone-500 text-[11px] md:text-sm mb-2.5 md:mb-4 line-clamp-2 flex-grow cursor-pointer"
+        >
           {product.description}
         </p>
 
         {/* Prices Row */}
-        <div className="flex items-baseline gap-2 mb-4">
-          <span className="text-xl font-bold text-stone-900">
-            {product.discountedPrice.toFixed(2)} ฿
+        <div className="flex items-baseline gap-1.5 md:gap-2 mb-3 md:mb-4">
+          <span className="text-base md:text-xl font-bold text-stone-900">
+            {product.discountedPrice.toFixed(0)} ฿
           </span>
           {hasDiscount && (
-            <span className="text-sm text-stone-400 line-through">
-              {product.originalPrice.toFixed(2)} ฿
+            <span className="text-[10px] md:text-sm text-stone-400 line-through">
+              {product.originalPrice.toFixed(0)} ฿
             </span>
           )}
         </div>
@@ -89,14 +95,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         {/* Footer Add to Cart Button */}
         <button
           onClick={() => onAddToCart(product)}
-          className={`w-full py-3 px-4 rounded-xl flex items-center justify-center gap-2 font-medium transition-all cursor-pointer ${
+          className={`w-full py-2 md:py-3 px-2 md:px-4 rounded-xl flex items-center justify-center gap-1 md:gap-2 text-xs md:text-sm font-medium transition-all cursor-pointer ${
             isInCart
               ? 'bg-stone-900 text-gold-400 border border-stone-800'
               : 'bg-gold-500 hover:bg-gold-600 text-stone-950 shadow-md hover:shadow-lg'
           }`}
         >
-          <ShoppingCart size={18} />
-          <span>{isInCart ? 'تمت الإضافة (زيادة)' : 'إضافة إلى السلة'}</span>
+          <ShoppingCart size={15} />
+          <span>{isInCart ? 'مضاف' : 'إضافة'}</span>
         </button>
       </div>
     </div>
