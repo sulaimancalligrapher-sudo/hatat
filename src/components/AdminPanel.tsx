@@ -119,15 +119,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     };
 
     onAddPromoCode(parsedPromo);
-    setAdminNotify('تمت إضافة كود الخصم بنجاح إلى جدول البيانات!');
-    
-    setNewPromo({
-      code: '',
-      discount: '10',
-      eligibleProducts: 'all',
-      status: 'active'
-    });
-
+    setAdminNotify('تمت إضافة كود الخصم بنجاح');
     setTimeout(() => setAdminNotify(null), 4000);
   };
 
@@ -140,21 +132,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 // معالجة طلبات جلب البيانات (GET)
 function doGet(e) {
   var action = e && e.parameter && e.parameter.action;
-  var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
   var result = {};
   
   try {
-    if (action === 'get_products') {
-      result = getImageData();
-    } else if (action === 'get_settings') {
+    if (action === 'get_settings') {
       result = getSettings();
+    } else if (action === 'get_products') {
+      result = getImageData();
     } else if (action === 'get_promo') {
-      var promoSheet = spreadsheet.getSheetByName('PromoCodes');
-      result = { promoCodes: promoSheet ? promoSheet.getDataRange().getValues().slice(1) : [] };
+      result = getPromoCodes();
     } else {
       result = getData();
     }
     
+    // إرجاع النتيجة كـ JSON مع تفعيل ترويسات السماح بالوصول (CORS)
     return ContentService.createTextOutput(JSON.stringify(result))
                          .setMimeType(ContentService.MimeType.JSON);
   } catch (err) {
@@ -201,184 +192,195 @@ function registerMember(data) {
   
   // إرسال البريد الترحيبي
   try {
-    sendEmailHelper(data.email, 'مرحباً بك في نادي النخبة للخط العربي! 🎉', \`
-        <div dir="rtl" style="font-family: 'Cairo', 'Segoe UI', Tahoma, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e5e5e5; border-radius: 16px; padding: 24px; background-color: #fcfbfa; color: #1c1917;">
-          <div style="text-align: center; margin-bottom: 24px; border-bottom: 2px solid #d6bf77; padding-bottom: 16px;">
-            <h2 style="color: #1c1917; font-family: serif; font-size: 24px; margin: 0;">أهلاً بك في نادي النخبة للخط العربي الفاخر ✨</h2>
-          </div>
-          <p>عزيزنا <strong>\${data.name}</strong>، يسعدنا انضمامك إلينا في مجتمع محبي الفنون الإسلامية والخط العربي الأصيل.</p>
-          <p>لقد تم تفعيل عضويتك ومنحك كوبون خصم ترحيبي بقيمة 10% يمكنك استخدامه فوراً في مشترياتك القادمة بالمتجر:</p>
-          
-          <div style="text-align: center; margin: 24px 0;">
-            <div style="padding: 15px 30px; background: #faf9f6; border: 2px dashed #d6bf77; display: inline-block; font-size: 24px; font-weight: bold; letter-spacing: 2px; color: #c5a850; font-family: monospace; border-radius: 8px;">
-              WELCOME10
-            </div>
-          </div>
-          
-          <p>تواصل معنا دائماً، وترقب عروضنا والقطع الفنية الحصرية القادمة المصممة خصيصاً لذوقك الرفيع.</p>
-          
-          <div style="text-align: center; margin-top: 32px; padding-top: 16px; border-top: 1px dashed #d6bf77; font-size: 12px; color: #78716c;">
-            <p style="margin: 0;">شكراً لاهتمامكم بالفن الأصيل ❤️</p>
-          </div>
-        </div>
-      \`);
+    var welcomeBody = 
+      '<div dir="rtl" style="font-family: \\'Cairo\\', \\'Segoe UI\\', Tahoma, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e5e5e5; border-radius: 16px; padding: 24px; background-color: #fcfbfa; color: #1c1917;">' +
+        '<div style="text-align: center; margin-bottom: 24px; border-bottom: 2px solid #d6bf77; padding-bottom: 16px;">' +
+          '<h2 style="color: #1c1917; font-family: serif; font-size: 24px; margin: 0;">أهلاً بك في نادي النخبة للخط العربي الفاخر ✨</h2>' +
+        '</div>' +
+        '<p>عزيزنا <strong>\' + data.name + \'</strong>، يسعدنا انضمامك إلينا في مجتمع محبي الفنون الإسلامية والخط العربي الأصيل.</p>' +
+        '<p>لقد تم تفعيل عضويتك ومنحك كوبون خصم ترحيبي بقيمة 10% يمكنك استخدامه فوراً في مشترياتك القادمة بالمتجر:</p>' +
+        
+        '<div style="text-align: center; margin: 24px 0;">' +
+          '<div style="padding: 15px 30px; background: #faf9f6; border: 2px dashed #d6bf77; display: inline-block; font-size: 24px; font-weight: bold; letter-spacing: 2px; color: #c5a850; font-family: monospace; border-radius: 8px;">' +
+            'WELCOME10' +
+          '</div>' +
+        '</div>' +
+        
+        '<p>تواصل معنا دائماً، وترقب عروضنا والقطع الفنية الحصرية القادمة المصممة خصيصاً لذوقك الرفيع.</p>' +
+        
+        '<div style="text-align: center; margin-top: 32px; padding-top: 16px; border-top: 1px dashed #d6bf77; font-size: 12px; color: #78716c;">' +
+          '<p style="margin: 0;">شكراً لاهتمامكم بالفن الأصيل ❤️</p>' +
+        '</div>' +
+      '</div>';
+
+    sendEmailHelper(data.email, 'مرحباً بك في نادي النخبة للخط العربي! 🎉', welcomeBody);
   } catch (e) {
-    Logger.log('فشل إرسال الإيميل الترحيبي: ' + e.message);
+    Logger.log(\'فشل إرسال الإيميل الترحيبي: \' + e.message);
   }
   
-  return { status: 'success', code: 'WELCOME10' };
+  return { status: \'success\', code: \'WELCOME10\' };
 }
 
+// جلب الإعدادات من شيت الإعدادات القديم بالترتيب الأصلي للصفوف والأعمدة
 function getSettings() {
   var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
-  var settingsSheet = spreadsheet.getSheetByName('Settings');
+  var settingsSheet = spreadsheet.getSheetByName(\'Settings\');
+  if (!settingsSheet) return {};
+  var lastRow = settingsSheet.getLastRow();
+  var data = settingsSheet.getRange(\'A2:F\' + lastRow).getValues();
+  
   var settings = {
-    headerImageUrl: 'https://images.unsplash.com/photo-1561214115-f2f134cc4912?q=80&w=600&auto=format&fit=crop',
-    facebookUrl: 'https://facebook.com/example_calligraphy',
-    instagramUrl: 'https://instagram.com/example_calligraphy',
-    youtubeUrl: 'https://youtube.com/c/example_calligraphy',
-    lineUrl: 'https://line.me/ti/p/example',
-    pageTitle: 'موقع النخبة للخط العربي والزخرفة الإسلامية',
-    recipientEmail: 'naskh4thanoun@gmail.com',
-    botToken: 'YOUR_TELEGRAM_BOT_TOKEN',
-    chatId: 'YOUR_TELEGRAM_CHAT_ID',
-    templateId: 'YOUR_GOOGLE_DOCS_TEMPLATE_ID',
-    folderUrl: '',
-    keywords: 'لوحات جدارية, مخطوطات خاصة, أدوات الخط العربي, دورات تدريبية, كتب وكراسات'
+    headerImageUrl: data[0] && data[0][1] ? data[0][1].toString().trim() : \'\',
+    facebookUrl: data[1] && data[1][1] ? data[1][1].toString().trim() : \'\',
+    instagramUrl: data[2] && data[2][1] ? data[2][1].toString().trim() : \'\',
+    youtubeUrl: data[3] && data[3][1] ? data[3][1].toString().trim() : \'\',
+    lineUrl: data[4] && data[4][1] ? data[4][1].toString().trim() : \'\',
+    pageTitle: data[6] && data[6][1] ? data[6][1].toString().trim() : \'معرض الصور\',
+    recipientEmail: data[7] && data[7][1] ? data[7][1].toString().trim() : \'\',
+    botToken: data[10] && data[10][1] ? data[10][1].toString().trim() : \'\',
+    chatId: data[11] && data[11][1] ? data[11][1].toString().trim() : \'\',
+    templateId: data[14] && data[14][1] ? data[14][1].toString().trim() : \'\',
+    folderUrl: data[15] && data[15][1] ? data[15][1].toString().trim() : \'\',
+    keywords: []
   };
-
-  if (settingsSheet) {
-    var values = settingsSheet.getDataRange().getValues();
-    for (var i = 1; i < values.length; i++) {
-      var key = values[i][0];
-      var value = values[i][1];
-      if (key && value !== undefined) {
-        settings[key] = value;
-      }
+  
+  for (var i = 0; i < data.length; i++) {
+    if (data[i] && data[i][5] && data[i][5].toString().trim()) {
+      settings.keywords.push(data[i][5].toString().trim());
     }
-  } else {
-    settingsSheet = spreadsheet.insertSheet('Settings');
-    settingsSheet.getRange('A1:B1').setValues([['المفتاح Key', 'القيمة Value']]);
-    var keys = Object.keys(settings);
-    for (var k = 0; k < keys.length; k++) {
-      settingsSheet.appendRow([keys[k], settings[keys[k]]]);
-    }
-  }
-
-  if (typeof settings.keywords === 'string') {
-    settings.keywords = settings.keywords.split(',').map(function(s) { return s.trim(); });
   }
   return settings;
 }
 
+// جلب المنتجات بالكامل مع الالتزام بترتيب الأعمدة للشيت القديم والملفات
 function getImageData() {
   var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = spreadsheet.getSheetByName('Images');
-  var products = [];
+  var sheet = spreadsheet.getSheetByName(\'Images\');
+  if (!sheet) return [];
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return [];
+  var lastColumn = sheet.getLastColumn();
+  var values = sheet.getRange(\'A2:\' + String.fromCharCode(64 + lastColumn) + lastRow).getValues();
+  var fontLines = sheet.getRange(\'O2:O\' + lastRow).getFontLines();
+  var data = [];
   
-  if (!sheet) {
-    sheet = spreadsheet.insertSheet('Images');
-    sheet.getRange('A1:I1').setValues([['FileID', 'Title', 'Description', 'OriginalPrice', 'DiscountedPrice', 'Category', 'ExtraImages', 'Details', 'Videos']]);
-    
-    var defaultProducts = [
-      ['1_demo_painting_1', 'لوحة آية الكرسي بخط الثلث الجلي', 'لوحة فنية أصلية مكتوبة بالحبر الكربوني ومذهبة بماء الذهب عيار 24.', 1500, 1200, 'لوحات جدارية', '', 'الأبعاد: 70 × 50 سم\\\\nنوع الخط: ثلث جلي فاخر', 'ScMzIvxBSi4'],
-      ['1_demo_painting_2', 'مخطوطة أسماء الله الحسنى الدائرية', 'تصميم هندسي دائري فريد يضم أسماء الله الحسنى كاملة.', 2000, 1800, 'لوحات جدارية', '', 'القطر: 60 سم (دائري)', ''],
-      ['1_demo_tools_1', 'صندوق أدوات الخطاط المحترف المتكامل', 'حقيبة خشبية يدوية الصنع تحتوي على مجموعة كاملة من القصب والأحبار.', 450, 380, 'أدوات الخط العربي', '', '6 أقلام قصب\\\\n3 زجاجات حبر', ''],
-      ['1_demo_curriculums', 'كراسة الأستاذ شوقي لخط الثلث والنسخ', 'المرجع الكلاسيكي الأهم لتعلم قواعد الحروف والاتصالات.', 90, 75, 'كتب وكراسات', '', 'عدد الصفحات: 48\\\\nالقياس: A4', ''],
-      ['1_demo_custom_order', 'طلب كتابة اسمك أو شعار خاص بالذهب', 'كتابة اسمك الشخصي بأقلام المحترفين وتنسيقه كتحفة فنية.', 350, 300, 'مخطوطات خاصة', '', 'بصيغة متجهة Vector', '']
-    ];
-    
-    for (var j = 0; j < defaultProducts.length; j++) {
-      sheet.appendRow(defaultProducts[j]);
-    }
-  }
-  
-  var data = sheet.getDataRange().getValues();
-  for (var i = 1; i < data.length; i++) {
-    var extraImagesStr = data[i][6] || '';
-    var detailsStr = data[i][7] || '';
-    var videosStr = data[i][8] || '';
-    
-    var extraImages = extraImagesStr ? extraImagesStr.split(',').map(function(s) { return s.trim(); }) : [];
-    var details = detailsStr ? detailsStr.split('\\\\n').map(function(s) { return s.trim(); }) : [];
-    var videos = videosStr ? [{ type: 'youtube', id: videosStr.trim() }] : [];
-    
-    products.push({
-      fileId: String(data[i][0]),
-      title: String(data[i][1]),
-      description: String(data[i][2]),
-      originalPrice: parseFloat(data[i][3]) || 0,
-      discountedPrice: parseFloat(data[i][4]) || 0,
-      isOriginalPriceStruck: parseFloat(data[i][3]) > parseFloat(data[i][4]),
-      category: String(data[i][5]),
-      extraImages: extraImages,
-      details: details,
-      videos: videos
-    });
-  }
-  return products;
-}
-
-function validatePromoCode(code) {
-  var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = spreadsheet.getSheetByName('PromoCodes');
-  
-  if (!sheet) {
-    sheet = spreadsheet.insertSheet('PromoCodes');
-    sheet.getRange('A1:D1').setValues([['الكود Code', 'الخصم Discount', 'المنتجات المشمولة Eligible', 'الحالة Status']]);
-    sheet.appendRow(['WELCOME10', 0.10, 'all', 'active']);
-    sheet.appendRow(['GOLD20', 0.20, 'all', 'active']);
-  }
-  
-  var cleanCode = code.toUpperCase().trim();
-  var data = sheet.getDataRange().getValues();
-  
-  for (var i = 1; i < data.length; i++) {
-    var sheetCode = String(data[i][0]).toUpperCase().trim();
-    if (sheetCode === cleanCode) {
-      var discount = parseFloat(data[i][1]) || 0;
-      var eligible = data[i][2] || 'all';
-      var status = data[i][3] || 'active';
-      
-      if (status === 'active') {
-        return {
-          valid: true,
-          discount: discount,
-          eligibleProducts: eligible,
-          message: 'تم تطبيق كود الخصم بنجاح! ✅'
-        };
-      } else {
-        return { valid: false, discount: 0, eligibleProducts: 'all', message: 'هذا الكود معطل حالياً' };
+  for (var i = 0; i < values.length; i++) {
+    if (values[i][0]) {
+      try {
+        var fileId = extractFileId(values[i][0]);
+        var extraImages = [];
+        var details = [];
+        var videos = [];
+        
+        for (var j = 3; j < values[i].length; j++) {
+          var value = values[i][j] ? values[i][j].toString().trim() : \'\';
+          if (value === \'\') continue;
+          if (j >= 3 && j <= 12) {
+            extraImages.push(extractFileId(value));
+          } else if (j >= 15 && j <= 16) {
+            details.push(value);
+          } else if (j >= 17) {
+            var youtubeId = extractYouTubeId(value);
+            var driveFileId = extractFileId(value);
+            if (youtubeId) {
+              videos.push({ type: \'youtube\', id: youtubeId });
+            } else if (driveFileId) {
+              videos.push({ type: \'drive\', id: driveFileId });
+            }
+          }
+        }
+        
+        var originalPrice = values[i][14] ? parseFloat(values[i][14]) : 0;
+        var discountedPrice = values[i][13] ? parseFloat(values[i][13]) : originalPrice;
+        var isOriginalPriceStruck = fontLines[i] && fontLines[i][0] === \'line-through\';
+        
+        data.push({
+          fileId: fileId,
+          title: values[i][1] ? values[i][1].toString().trim() : \'بدون عنوان\',
+          description: values[i][2] ? values[i][2].toString().trim() : \'بدون وصف\',
+          originalPrice: isNaN(originalPrice) ? 0 : originalPrice,
+          discountedPrice: isNaN(discountedPrice) ? originalPrice : discountedPrice,
+          isOriginalPriceStruck: !!isOriginalPriceStruck,
+          extraImages: extraImages,
+          details: details,
+          videos: videos,
+          category: values[i][1] ? \'لوحات جدارية\' : \'عام\'
+        });
+      } catch (e) {
+        Logger.log(\'خطأ في معالجة الصف: \' + e.message);
       }
     }
   }
-  return { valid: false, discount: 0, eligibleProducts: 'all', message: 'الكود المكتوب غير صحيح أو منتهي' };
+  return data;
 }
 
+// التحقق من كود الخصم في شيت PromoCodes
+function validatePromoCode(code) {
+  var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = spreadsheet.getSheetByName(\'PromoCodes\');
+  if (!sheet) return { valid: false, message: \'لا توجد ورقة خصومات\' };
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return { valid: false, message: \'لا توجد أكواد حالياً\' };
+  
+  var values = sheet.getRange(\'A2:D\' + lastRow).getValues();
+  for (var i = 0; i < values.length; i++) {
+    if (values[i][0].toString().trim().toUpperCase() === code.toUpperCase()) {
+      if (values[i][3].toString().trim().toLowerCase() !== \'active\') {
+        return { valid: false, message: \'الكود معطل حالياً\' };
+      }
+      var discount = parseFloat(values[i][1]) || 0.1;
+      return {
+        valid: true,
+        discount: discount,
+        eligibleProducts: values[i][2] || \'all\',
+        message: \'تم تفعيل الكود الترويجي بنجاح! ✅\'
+      };
+    }
+  }
+  return { valid: false, message: \'الكوبون المكتوب غير صالح\' };
+}
+
+// جلب قائمة الأكواد الترويجية بالكامل لمدير المتجر
+function getPromoCodes() {
+  var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = spreadsheet.getSheetByName(\'PromoCodes\');
+  if (!sheet) return [];
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return [];
+  return sheet.getRange(\'A2:D\' + lastRow).getValues().map(row => ({
+    code: row[0].toString().trim(),
+    discount: parseFloat(row[1]) || 0.1,
+    eligibleProducts: row[2] || \'all\',
+    status: row[3] || \'active\'
+  }));
+}
+
+// تجميع كافة البيانات للشيت لغرض المزامنة الكاملة
 function getData() {
   var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
   return {
-    profile: spreadsheet.getSheetByName('Profile') ? spreadsheet.getSheetByName('Profile').getDataRange().getValues().slice(1) : [],
-    contact: spreadsheet.getSheetByName('Contact') ? spreadsheet.getSheetByName('Contact').getDataRange().getValues().slice(1) : [],
-    images: spreadsheet.getSheetByName('Images') ? spreadsheet.getSheetByName('Images').getDataRange().getValues().slice(1) : [],
-    settings: spreadsheet.getSheetByName('Settings') ? spreadsheet.getSheetByName('Settings').getDataRange().getValues().slice(1) : [],
-    promoCodes: spreadsheet.getSheetByName('PromoCodes') ? spreadsheet.getSheetByName('PromoCodes').getDataRange().getValues().slice(1) : [],
-    email: spreadsheet.getSheetByName('Email') ? spreadsheet.getSheetByName('Email').getDataRange().getValues().slice(1) : [],
-    orders: spreadsheet.getSheetByName('Orders') ? spreadsheet.getSheetByName('Orders').getDataRange().getValues().slice(1) : [],
-    members: spreadsheet.getSheetByName('Members') ? spreadsheet.getSheetByName('Members').getDataRange().getValues().slice(1) : []
+    profile: spreadsheet.getSheetByName(\'Profile\') ? spreadsheet.getSheetByName(\'Profile\').getDataRange().getValues().slice(1) : [],
+    contact: spreadsheet.getSheetByName(\'Contact\') ? spreadsheet.getSheetByName(\'Contact\').getDataRange().getValues().slice(1) : [],
+    images: spreadsheet.getSheetByName(\'Images\') ? spreadsheet.getSheetByName(\'Images\').getDataRange().getValues().slice(1) : [],
+    settings: spreadsheet.getSheetByName(\'Settings\') ? spreadsheet.getSheetByName(\'Settings\').getDataRange().getValues().slice(1) : [],
+    promoCodes: spreadsheet.getSheetByName(\'PromoCodes\') ? spreadsheet.getSheetByName(\'PromoCodes\').getDataRange().getValues().slice(1) : [],
+    email: spreadsheet.getSheetByName(\'Email\') ? spreadsheet.getSheetByName(\'Email\').getDataRange().getValues().slice(1) : [],
+    orders: spreadsheet.getSheetByName(\'Orders\') ? spreadsheet.getSheetByName(\'Orders\').getDataRange().getValues().slice(1) : [],
+    members: spreadsheet.getSheetByName(\'Members\') ? spreadsheet.getSheetByName(\'Members\').getDataRange().getValues().slice(1) : []
   };
 }
 
+// استقبال وتسجيل وإتمام طلب شراء جديد بالكامل وإرسال إشعارات التلجرام والبريد الإلكتروني
 function submitOrder(order) {
   var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
-  var orderSheet = spreadsheet.getSheetByName('Orders');
+  var orderSheet = spreadsheet.getSheetByName(\'Orders\');
   if (!orderSheet) {
-    orderSheet = spreadsheet.insertSheet('Orders');
-    orderSheet.getRange('A1:L1').setValues([['رقم الطلب', 'تاريخ ووقت الإرسال', 'الاسم', 'العنوان', 'رقم الهاتف', 'البريد الإلكتروني', 'المنتجات', 'الكميات', 'المبلغ الكلي', 'كود الخصم', 'حالة التلجرام', 'رابط الفاتورة PDF']]);
+    orderSheet = spreadsheet.insertSheet(\'Orders\');
+    orderSheet.getRange(\'A1:L1\').setValues([[\'رقم الطلب\', \'تاريخ ووقت الإرسال\', \'الاسم\', \'العنوان\', \'رقم الهاتف\', \'البريد الإلكتروني\', \'المنتجات\', \'الكميات\', \'المبلغ الكلي\', \'كود الخصم\', \'حالة التلجرام\', \'رابط الفاتورة PDF\']]);
   }
   
-  var orderId = 'ORD' + Utilities.formatDate(new Date(), 'GMT+7', 'yyyyMMddHHmmss') + Math.floor(Math.random() * 1000);
-  var timestamp = Utilities.formatDate(new Date(), 'GMT+7', 'yyyy-MM-dd HH:mm:ss');
+  var orderId = \'ORD\' + Utilities.formatDate(new Date(), \'GMT+7\', \'yyyyMMddHHmmss\') + Math.floor(Math.random() * 1000);
+  var timestamp = Utilities.formatDate(new Date(), \'GMT+7\', \'yyyy-MM-dd HH:mm:ss\');
   
   var productsList = [];
   var quantitiesList = [];
@@ -392,7 +394,7 @@ function submitOrder(order) {
     totalAmount += (itemPrice * items[i].quantity);
   }
   
-  var promoCode = order.promoCode || '';
+  var promoCode = order.promoCode || \'\';
   if (promoCode) {
     var promo = validatePromoCode(promoCode);
     if (promo && promo.valid) {
@@ -400,75 +402,71 @@ function submitOrder(order) {
     }
   }
   
-  var productsStr = productsList.join(', ');
-  var quantitiesStr = quantitiesList.join(', ');
+  var productsStr = productsList.join(\', \');
+  var quantitiesStr = quantitiesList.join(\', \');
   
   var settings = getSettings();
-  var botToken = settings.botToken || '';
-  var chatId = settings.chatId || '';
-  var telegramSentStatus = 'لم يتم الإعداد';
+  var botToken = settings.botToken || \'\';
+  var chatId = settings.chatId || \'\';
+  var telegramSentStatus = \'لم يتم الإعداد\';
   
-  // 1. إرسال إشعار التلجرام
-  if (botToken && chatId && botToken !== 'YOUR_TELEGRAM_BOT_TOKEN' && chatId !== 'YOUR_TELEGRAM_CHAT_ID') {
+  // 1. إرسال إشعار التلجرام الفوري
+  if (botToken && chatId && botToken !== \'YOUR_TELEGRAM_BOT_TOKEN\' && chatId !== \'YOUR_TELEGRAM_CHAT_ID\') {
     try {
       var message = "🔔 *طلب شراء جديد من متجر النخبة!*\\n\\n" +
                     "👤 *العميل:* " + order.name + "\\n" +
                     "📞 *الهاتف:* " + order.phone + "\\n" +
                     "📍 *العنوان:* " + order.address + "\\n" +
                     "📧 *الإيميل:* " + order.email + "\\n\\n" +
-                    "🛍️ *المنتجات:* " + productsStr + "\\n" +
+                    "🛍 *المنتجات:* " + productsStr + "\\n" +
                     "🔢 *الكميات:* " + quantitiesStr + "\\n" +
                     "💰 *الإجمالي:* " + totalAmount.toFixed(2) + " ฿\\n" +
                     "🎫 *الكوبون:* " + (promoCode ? promoCode : "لا يوجد") + "\\n" +
                     "🆔 *رقم الطلب:* \`" + orderId + "\`";
       
-      var url = 'https://api.telegram.org/bot' + botToken + '/sendMessage';
+      var url = \'https://api.telegram.org/bot\' + botToken + \'/sendMessage\';
       var payload = {
-        'chat_id': chatId,
-        'text': message,
-        'parse_mode': 'Markdown'
+        \'chat_id\': chatId,
+        \'text\': message,
+        \'parse_mode\': \'Markdown\'
       };
       
       var options = {
-        'method': 'post',
-        'contentType': 'application/json',
-        'payload': JSON.stringify(payload),
-        'muteHttpExceptions': true
+        \'method\': \'post\',
+        \'contentType\': \'application/json\',
+        \'payload\': JSON.stringify(payload),
+        \'muteHttpExceptions\': true
       };
       
       UrlFetchApp.fetch(url, options);
-      telegramSentStatus = 'تم الإرسال للتلغرام ✅';
+      telegramSentStatus = \'تم الإرسال للتلغرام ✅\';
     } catch (e) {
-      telegramSentStatus = 'فشل الإرسال: ' + e.message;
+      telegramSentStatus = \'فشل الإرسال: \' + e.message;
     }
   }
 
-  // 2. توليد مستند الفاتورة PDF وحفظه في درايف
-  var pdfLink = '#';
+  // 2. توليد ملف الفاتورة PDF وحفظه في مجلد Google Drive
+  var pdfLink = \'#\';
   var pdfFile = null;
-  var templateId = settings.templateId || '';
-  var folderUrl = settings.folderUrl || '';
   
-  if (templateId && folderUrl && templateId !== 'YOUR_GOOGLE_DOCS_TEMPLATE_ID' && templateId !== '') {
-    try {
-      var pdfResult = generateInvoicePDF(orderId, order);
-      if (pdfResult && pdfResult.status === 'success') {
-        pdfLink = pdfResult.pdfUrl;
-        pdfFile = pdfResult.file;
-      }
-    } catch (e) {
-      Logger.log('خطأ في توليد الـ PDF: ' + e.message);
+  try {
+    var pdfResult = generateAndSavePDF(orderId, order);
+    if (pdfResult && pdfResult.status === \'success\') {
+      pdfLink = pdfResult.pdfUrl;
+      pdfFile = pdfResult.file;
     }
+  } catch (e) {
+    Logger.log(\'خطأ في توليد الـ PDF: \' + e.message);
   }
   
-  // 3. إرسال البريد الإلكتروني لتأكيد الطلب للزبون (مع المرفق PDF إن وجد)
+  // 3. إرسال البريد الإلكتروني لتأكيد الطلب للعميل وصاحب المتجر مع ملف PDF المرفق
   try {
     sendEmailConfirmation(orderId, order, pdfFile);
   } catch (emailErr) {
-    Logger.log('فشل إرسال إيميل التأكيد: ' + emailErr.message);
+    Logger.log(\'فشل إرسال إيميل التأكيد: \' + emailErr.message);
   }
   
-  // 4. تسجيل الطلب في السطر الجديد بالجدول
+  // 4. تسجيل وتوثيق الطلب بالكامل في شيت Orders
   orderSheet.appendRow([
     orderId,
     timestamp,
@@ -484,333 +482,195 @@ function submitOrder(order) {
     pdfLink
   ]);
   
-  return { status: 'success', orderId: orderId, telegramSent: telegramSentStatus, pdfLink: pdfLink };
+  return { status: \'success\', orderId: orderId, telegramSent: telegramSentStatus, pdfLink: pdfLink };
 }
 
-// توليد الفاتورة الاحترافية وإضافة جدول المنتجات المنظم
-function generateInvoicePDF(orderId, order) {
+// توليد الفاتورة الاحترافية بالاعتماد على قالب مستند جوجل المخصص
+function generateAndSavePDF(orderId, order) {
   try {
-    Logger.log('بدء إنشاء وحفظ ملف PDF للطلب: ' + orderId);
-    
-    var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
-    var settingsSheet = spreadsheet.getSheetByName('Settings');
-    if (!settingsSheet) {
-      throw new Error('ورقة Settings غير موجودة');
+    var settings = getSettings();
+    if (!settings.templateId || !settings.folderUrl) {
+      return { status: \'error\', message: \'قالب الفاتورة أو المجلد غير مهيأ\' };
     }
     
-    var settingsData = settingsSheet.getRange('A16:B17').getValues();
-    var settings = {
-      templateId: String(settingsData[0][1] || '').trim(),
-      folderUrl: String(settingsData[1][1] || '').trim()
-    };
+    var folderIdMatch = settings.folderUrl.match(/folders\\/([a-zA-Z0-9_-]+)/) || settings.folderUrl.match(/[-\\w]{25,}/);
+    if (!folderIdMatch) {
+      return { status: \'error\', message: \'رابط مجلد الحفظ غير صالح\' };
+    }
+    var folderId = folderIdMatch[1] || folderIdMatch[0];
     
-    if (!settings.templateId || settings.templateId === 'YOUR_GOOGLE_DOCS_TEMPLATE_ID') {
-      throw new Error('معرف القالب Template ID غير مهيأ');
-    }
-    if (!settings.folderUrl) {
-      throw new Error('رابط مجلد الحفظ Folder URL غير مهيأ');
-    }
-
-    var folderIdMatch = settings.folderUrl.match(/folders\\/([a-zA-Z0-9_-]+)/) || settings.folderUrl.match(/[-\\\\w]{25,}/);
-    if (!folderIdMatch || !folderIdMatch[1]) {
-      throw new Error('رابط مجلد الحفظ غير صالح');
-    }
-    var folderId = folderIdMatch[1];
-
-    var templateFile = DriveApp.getFileById(settings.templateId);
-    var targetFolder = DriveApp.getFolderById(folderId);
-    var copiedFile = templateFile.makeCopy('فاتورة_' + orderId, targetFolder);
-    var doc = DocumentApp.openById(copiedFile.getId());
+    var tempDoc = DriveApp.getFileById(settings.templateId).makeCopy(\'Temp_Bill_\' + orderId, DriveApp.getFolderById(folderId));
+    var doc = DocumentApp.openById(tempDoc.getId());
     var body = doc.getBody();
-
-    var timestamp = Utilities.formatDate(new Date(), 'GMT+7', 'yyyy-MM-dd HH:mm:ss');
-    var totalAmount = order.items.reduce(function(sum, item) {
-      var price = item.finalPrice || item.discountedPrice || item.price || 0;
-      return sum + (price * item.quantity);
-    }, 0).toFixed(2);
-
-    body.replaceText('{{orderId}}', orderId);
-    body.replaceText('{{timestamp}}', timestamp);
-    body.replaceText('{{name}}', order.name || '');
-    body.replaceText('{{address}}', order.address || '');
-    body.replaceText('{{phone}}', order.phone || '');
-    body.replaceText('{{email}}', order.email || '');
-    body.replaceText('{{promoCode}}', order.promoCode || 'غير مستخدم');
-    body.replaceText('{{totalAmount}}', totalAmount);
-
-    var foundElement = body.findText('{{items}}');
-    if (foundElement) {
-      var paragraph = foundElement.getElement().getParent();
-      paragraph.asParagraph().replaceText('{{items}}', '');
-      var table = body.insertTable(body.getChildIndex(paragraph) + 1);
-      
-      var headerRow = table.appendTableRow();
-      var headers = ['المنتج', 'الكمية', 'سعر الوحدة', 'الإجمالي'];
-      headers.forEach(function(header) {
-        var cell = headerRow.appendTableCell(header);
-        cell.getChild(0).asParagraph().setBold(true);
-        cell.getChild(0).asParagraph().setAlignment(DocumentApp.HorizontalAlignment.RIGHT);
-      });
-      
-      order.items.forEach(function(item) {
-        var row = table.appendTableRow();
-        var itemTitle = item.title || 'غير معروف';
-        var itemQuantity = item.quantity || 1;
-        var unitPrice = Number(item.finalPrice || item.discountedPrice || item.price || 0).toFixed(0);
-        var itemTotal = (Number(item.finalPrice || item.discountedPrice || item.price || 0) * itemQuantity).toFixed(0);
-        
-        row.appendTableCell(itemTitle).getChild(0).asParagraph().setAlignment(DocumentApp.HorizontalAlignment.RIGHT);
-        row.appendTableCell(itemQuantity.toString()).getChild(0).asParagraph().setAlignment(DocumentApp.HorizontalAlignment.RIGHT);
-        row.appendTableCell(unitPrice).getChild(0).asParagraph().setAlignment(DocumentApp.HorizontalAlignment.RIGHT);
-        row.appendTableCell(itemTotal).getChild(0).asParagraph().setAlignment(DocumentApp.HorizontalAlignment.RIGHT);
-      });
-      
-      var totalRow = table.appendTableRow();
-      totalRow.appendTableCell('الإجمالي الكلي').getChild(0).asParagraph().setBold(true).setAlignment(DocumentApp.HorizontalAlignment.RIGHT);
-      totalRow.appendTableCell('');
-      totalRow.appendTableCell('');
-      totalRow.appendTableCell(totalAmount + ' ฿').getChild(0).asParagraph().setBold(true).setAlignment(DocumentApp.HorizontalAlignment.RIGHT);
-      
-      table.setBorderWidth(1);
-      table.setBorderColor('#c5a850');
-    }
-
+    
+    body.replaceText(\'{{orderId}}\', orderId);
+    body.replaceText(\'{{name}}\', order.name || \'\');
+    body.replaceText(\'{{phone}}\', order.phone || \'\');
+    body.replaceText(\'{{address}}\', order.address || \'\');
+    body.replaceText(\'{{email}}\', order.email || \'\');
+    
+    var total = order.items.reduce((sum, item) => sum + ((item.finalPrice || item.discountedPrice || item.price || 0) * item.quantity), 0);
+    body.replaceText(\'{{totalAmount}}\', total.toFixed(2));
+    
+    var tableText = order.items.map(function(item) {
+      return (item.title || \'غير معروف\') + \' (x\' + (item.quantity || 1) + \') - \' + ((item.finalPrice || item.discountedPrice || item.price || 0) * (item.quantity || 1)).toFixed(2) + \' ฿\';
+    }).join(\'\\n\');
+    body.replaceText(\'{{items}}\', tableText);
+    
     doc.saveAndClose();
-
-    var pdfBlob = copiedFile.getAs(MimeType.PDF);
-    var pdfFile = targetFolder.createFile(pdfBlob).setName('Invoice_' + orderId + '.pdf');
-    copiedFile.setTrashed(true);
+    var pdfBlob = tempDoc.getAs(MimeType.PDF);
+    var pdfFile = DriveApp.getFolderById(folderId).createFile(pdfBlob).setName(\'Invoice_\' + orderId + \'.pdf\');
+    tempDoc.setTrashed(true);
     pdfFile.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
     
-    return { status: 'success', file: pdfFile, pdfUrl: pdfFile.getUrl() };
-  } catch (err) {
-    Logger.log('خطأ في توليد الفاتورة: ' + err.message);
-    return { status: 'error', message: err.message, file: null, pdfUrl: '#' };
+    return { status: \'success\', file: pdfFile, pdfUrl: pdfFile.getUrl() };
+  } catch (e) {
+    Logger.log(\'PDF Generation Error: \' + e.message);
+    return { status: \'error\', message: e.message };
   }
 }
 
-// صياغة وإرسال البريد الإلكتروني للمشرف وللعميل بالاعتماد على جداول البيانات وقالب الإيميل الخاص بالمستخدم
+// إعداد وصياغة محتوى البريد الإلكتروني للعميل والمدير بأعلى احترافية وأمان
 function sendEmailConfirmation(orderId, order, pdfFile) {
   try {
     var settings = getSettings();
-    var timestamp = Utilities.formatDate(new Date(), 'GMT+7', 'yyyy-MM-dd HH:mm:ss');
-    var promoCode = order.promoCode || '';
+    var timestamp = Utilities.formatDate(new Date(), \'GMT+7\', \'yyyy-MM-dd HH:mm:ss\');
+    var promoCode = order.promoCode || \'\';
     
-    var totalAmount = 0;
-    if (order.items && order.items.length > 0) {
-      totalAmount = order.items.reduce(function(sum, item) {
-        var price = Number(item.finalPrice || item.discountedPrice || item.price || 0);
-        var qty = Number(item.quantity || 1);
-        return sum + (price * qty);
-      }, 0);
-    }
+    var totalAmount = order.items.reduce(function(sum, item) {
+      var price = Number(item.finalPrice || item.discountedPrice || item.price || 0);
+      var qty = Number(item.quantity || 1);
+      return sum + (price * qty);
+    }, 0);
 
-    // 1. إرسال البريد الإلكتروني للمشرف (صاحب المتجر)
-    if (settings.recipientEmail) {
+    // تجهيز جدول المنتجات لعرضه في الإيميل بشكل أنيق ومنسق جداً
+    var productsHtmlTable = 
+      \'<table border="1" style="border-collapse: collapse; width: 100%; text-align: right;" dir="rtl">\' +
+        \'<tr style="background-color: #f2f2f2; color: #1c1917; font-weight: bold;">\' +
+          \'<th style="padding: 10px;">المنتج</th>\' +
+          \'<th style="padding: 10px; text-align: center;">سعر الوحدة</th>\' +
+          \'<th style="padding: 10px; text-align: center;">الكمية</th>\' +
+          \'<th style="padding: 10px; text-align: center;">الإجمالي</th>\' +
+        \'</tr>\';
+    
+    order.items.forEach(function(item) {
+      var price = Number(item.finalPrice || item.discountedPrice || item.price || 0);
+      var qty = Number(item.quantity || 1);
+      productsHtmlTable += 
+        \'<tr>\' +
+          \'<td style="padding: 8px;">\' + String(item.title || \'\') + \'</td>\' +
+          \'<td style="padding: 8px; text-align: center;">\' + price.toFixed(0) + \' ฿</td>\' +
+          \'<td style="padding: 8px; text-align: center;">\' + qty.toFixed(0) + \'</td>\' +
+          \'<td style="padding: 8px; text-align: center;">\' + (price * qty).toFixed(0) + \' ฿</td>\' +
+        \'</tr>\';
+    });
+    
+    productsHtmlTable += 
+      \'<tr style="font-weight: bold; background-color: #fcfbfa;">\' +
+        \'<td colspan="3" style="padding: 10px; text-align: right;">المبلغ الإجمالي كلياً</td>\' +
+        \'<td style="padding: 10px; text-align: center; color: #c5a850;">\' + totalAmount.toFixed(0) + \' ฿</td>\' +
+      \'</tr>\' +
+    \'</table>\';
+
+    // 1. إرسال البريد الإلكتروني لتأكيد الطلب للعميل
+    var targetCustomerEmail = String(order.email || \'\').trim();
+    if (targetCustomerEmail && /^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(targetCustomerEmail)) {
       try {
-        var emailData = getEmailContent();
-        var labels = emailData.labels || {};
-        var defaultNoPromo = labels['no_promo_code'] || 'غير مستخدم';
-        var defaultAdditionalTitle = labels['additional_content_title'] || 'محتوى إضافي';
-        var subject = labels['new_order_subject'] || ('طلب جديد: ' + orderId);
-        
-        var body = '<h2>' + (labels['order_details_title'] || 'تفاصيل الطلب') + '</h2>' +
-                   '<p><strong>' + (labels['order_id_label'] || 'رقم الطلب:') + '</strong> ' + orderId + '</p>' +
-                   '<p><strong>' + (labels['timestamp_label'] || 'الوقت:') + '</strong> ' + timestamp + '</p>' +
-                   '<p><strong>' + (labels['customer_name_label'] || 'اسم العميل:') + '</strong> ' + order.name + '</p>' +
-                   '<p><strong>' + (labels['address_label'] || 'العنوان:') + '</strong> ' + order.address + '</p>' +
-                   '<p><strong>' + (labels['phone_label'] || 'رقم الهاتف:') + '</strong> ' + order.phone + '</p>' +
-                   '<p><strong>' + (labels['email_label'] || 'البريد الإلكتروني:') + '</strong> ' + order.email + '</p>' +
-                   '<p><strong>' + (labels['promo_code_label'] || 'الكود الترويجي:') + '</strong> ' + (promoCode || defaultNoPromo) + '</p>' +
-                   '<h3>' + (labels['products_title'] || 'المنتجات:') + '</h3>' +
-                   '<table border="1" style="border-collapse: collapse; width: 100%; text-align: right;" dir="rtl">' +
-                     '<tr style="background-color: #f2f2f2;">' +
-                       '<th style="padding: 8px;">' + (labels['product_header'] || 'المنتج') + '</th>' +
-                       '<th style="padding: 8px; text-align: center;">' + (labels['original_price_header'] || 'السعر الأصلي (฿)') + '</th>' +
-                       '<th style="padding: 8px; text-align: center;">' + (labels['discounted_price_header'] || 'السعر بعد الخصم (฿)') + '</th>' +
-                       '<th style="padding: 8px; text-align: center;">' + (labels['promo_price_header'] || 'السعر بعد الترويج (฿)') + '</th>' +
-                       '<th style="padding: 8px; text-align: center;">' + (labels['quantity_header'] || 'الكمية') + '</th>' +
-                       '<th style="padding: 8px; text-align: center;">' + (labels['total_header'] || 'الإجمالي (฿)') + '</th>' +
-                     '</tr>';
-        
-        if (order.items && order.items.length > 0) {
-          order.items.forEach(function(item) {
-            var origP = Number(item.originalPrice || item.price || 0);
-            var discP = Number(item.discountedPrice || origP);
-            var finalP = Number(item.finalPrice || discP);
-            var qty = Number(item.quantity || 1);
-            body += '<tr>' +
-                      '<td style="padding: 8px;">' + String(item.title || '') + '</td>' +
-                      '<td style="padding: 8px; text-align: center;">' + origP.toFixed(0) + '</td>' +
-                      '<td style="padding: 8px; text-align: center;">' + discP.toFixed(0) + '</td>' +
-                      '<td style="padding: 8px; text-align: center;">' + finalP.toFixed(0) + '</td>' +
-                      '<td style="padding: 8px; text-align: center;">' + qty.toFixed(0) + '</td>' +
-                      '<td style="padding: 8px; text-align: center;">' + (finalP * qty).toFixed(0) + '</td>' +
-                    '</tr>';
-          });
-        }
-        
-        body += '<tr style="font-weight: bold; background-color: #fcfcfc;">' +
-                  '<td colspan="5" style="padding: 8px; text-align: right;">' + (labels['total_amount_label'] || 'المبلغ الإجمالي') + '</td>' +
-                  '<td style="padding: 8px; text-align: center;">' + totalAmount.toFixed(0) + ' ฿</td>' +
-                '</tr>' +
-              '</table>';
-        
-        var emailContent = emailData.additionalContent || [];
-        var attachments = [];
-        
-        // إرفاق الفاتورة الحالية للمشرف
+        var customerBody = 
+          \'<div dir="rtl" style="font-family: \\'Cairo\\', \\'Segoe UI\\', Tahoma, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e5e5e5; border-radius: 16px; padding: 24px; background-color: #fcfbfa; color: #1c1917;">\' +
+            \'<div style="text-align: center; margin-bottom: 24px; border-bottom: 2px solid #d6bf77; padding-bottom: 16px;">\' +
+              \'<h2 style="color: #1c1917; font-family: serif; font-size: 24px; margin: 0;">شكراً لثقتك وتسوقك معنا! 🎉</h2>\' +
+              \'<p style="font-size: 14px; color: #78716c; margin: 8px 0 0 0;">تم استلام طلبك بنجاح وجاري العمل على تجهيزه</p>\' +
+            \'</div>\' +
+            \'<p>عزيزنا العميل <strong>\' + order.name + \'</strong>، تم تسجيل طلبك بنجاح بالمتجر.</p>\' +
+            \'<p>إليك تفاصيل الطلب الخاص بك ومرفق معه فاتورة PDF للتفاصيل المالية:</p>\' +
+            
+            \'<div style="background-color: #faf9f6; padding: 15px; border-radius: 8px; border: 1px solid #f3f2ed; margin: 20px 0;">\' +
+              \'<p style="margin: 4px 0;"><strong>رقم الطلب:</strong> <span style="font-family: monospace; font-weight: bold; color: #c5a850;">\' + orderId + \'</span></p>\' +
+              \'<p style="margin: 4px 0;"><strong>التاريخ والوقت:</strong> \' + timestamp + \'</p>\' +
+              \'<p style="margin: 4px 0;"><strong>رقم الجوال:</strong> \' + order.phone + \'</p>\' +
+              \'<p style="margin: 4px 0;"><strong>العنوان المستهدف بالشحن:</strong> \' + order.address + \'</p>\' +
+              \'<p style="margin: 4px 0;"><strong>كوبون الخصم:</strong> \' + (promoCode ? promoCode : \'لا يوجد\') + \'</p>\' +
+            \'</div>\' +
+            
+            \'<h3 style="color: #1c1917; font-size: 18px; margin-top: 24px;">المنتجات المطلوبة:</h3>\' +
+            productsHtmlTable +
+            
+            \'<p style="margin-top: 24px;">سنقوم بالتواصل معك قريباً جداً عبر الهاتف أو LINE لتأكيد موعد التسليم والشحن.</p>\' +
+            \'<p style="color: #059669; font-weight: bold; text-align: center; margin: 24px 0;">شكرًا لاختيارك الفن والخط العربي الأصيل! ❤️</p>\' +
+            
+            \'<div style="text-align: center; margin-top: 32px; padding-top: 16px; border-top: 1px dashed #d6bf77; font-size: 12px; color: #78716c;">\' +
+              \'<p style="margin: 0;">متجر النخبة للخط العربي والزخرفة الإسلامية</p>\' +
+              (settings.lineUrl ? \'<p style="margin: 4px 0;"><a href="\' + settings.lineUrl + \'" style="color: #c5a850; text-decoration: none;">تواصل معنا عبر LINE</a></p>\' : \'\') +
+            \'</div>\' +
+          \'</div>\';
+
+        var customerAttachments = [];
         if (pdfFile) {
-          try {
-            attachments.push(pdfFile.getBlob());
-          } catch (blobErr) {
-            Logger.log('خطأ في إرفاق ملف PDF لإيميل المشرف: ' + blobErr.message);
-          }
+          customerAttachments.push(pdfFile.getBlob());
         }
         
-        if (emailContent.length > 0) {
-          body += '<h3>' + defaultAdditionalTitle + '</h3>';
-          emailContent.forEach(function(item) {
-            if (item.type === 'text') {
-              body += '<p><strong>' + item.description + ':</strong> ' + item.content + '</p>';
-            } else if (item.type === 'image') {
-              body += '<p><strong>' + item.description + ':</strong></p>' +
-                      '<img src="https://drive.google.com/thumbnail?id=' + item.fileId + '" alt="' + item.description + '" style="max-width: 600px; height: auto;">';
-            } else if (item.type === 'pdf') {
-              try {
-                var file = DriveApp.getFileById(item.fileId);
-                attachments.push(file.getBlob());
-                body += '<p><strong>' + item.description + ':</strong> ' + (labels['pdf_attached'] || 'مرفق كملف PDF') + '</p>';
-              } catch (e) {
-                Logger.log('خطأ في إرفاق ملف PDF إضافي للمشرف: ' + e.message);
-                body += '<p><strong>' + item.description + ':</strong> ' + (labels['pdf_error'] || 'خطأ في إرفاق الملف: ') + e.message + '</p>';
-              }
-            }
-          });
-        }
-        
-        sendEmailHelper(settings.recipientEmail, subject, body, attachments);
-      } catch (adminErr) {
-        Logger.log('خطأ في إرسال إيميل المشرف: ' + adminErr.message);
+        sendEmailHelper(targetCustomerEmail, \'تأكيد طلبك رقم \' + orderId + \' من متجر النخبة 🧾\', customerBody, customerAttachments);
+      } catch (custErr) {
+        Logger.log(\'خطأ في إرسال بريد الزبون: \' + custErr.message);
       }
     }
-    
-    // 2. إرسال البريد الإلكتروني لتأكيد الطلب للزبون
-    var targetCustomerEmail = String(order.email || '').trim();
-    if (targetCustomerEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(targetCustomerEmail)) {
+
+    // 2. إرسال البريد الإلكتروني للمشرف (صاحب المتجر)
+    if (settings.recipientEmail) {
       try {
-        var customerEmailData = getCustomerEmailContent();
-        var customerLabels = customerEmailData.labels || {};
-        var customerNoPromo = customerLabels['no_promo_code'] || 'غير مستخدم';
-        var customerAdditionalTitle = customerLabels['additional_content_title'] || 'معلومات إضافية';
-        var customerSubject = customerLabels['confirmation_subject'] || ('تأكيد طلبك رقم: ' + orderId);
-        
-        var customerBody = '<h2>' + (customerLabels['thank_you_title'] || 'شكرًا لتسوقك معنا! 🎉') + '</h2>' +
-                           '<p>' + (customerLabels['order_received_message'] || 'تم استلام طلبك بنجاح. إليك تفاصيل طلبك:') + '</p>' +
-                           '<hr>' +
-                           '<p><strong>' + (customerLabels['order_id_label'] || 'رقم الطلب:') + '</strong> ' + orderId + '</p>' +
-                           '<p><strong>' + (customerLabels['timestamp_label'] || 'الوقت:') + '</strong> ' + timestamp + '</p>' +
-                           '<p><strong>' + (customerLabels['customer_name_label'] || 'اسمك:') + '</strong> ' + order.name + '</p>' +
-                           '<p><strong>' + (customerLabels['address_label'] || 'العنوان:') + '</strong> ' + order.address + '</p>' +
-                           '<p><strong>' + (customerLabels['phone_label'] || 'رقم الهاتف:') + '</strong> ' + order.phone + '</p>' +
-                           '<p><strong>' + (customerLabels['promo_code_label'] || 'الكود الترويجي:') + '</strong> ' + (promoCode || customerNoPromo) + '</p>' +
-                           '<h3>' + (customerLabels['products_title'] || 'المنتجات:') + '</h3>' +
-                           '<table border="1" style="width:100%; border-collapse: collapse; direction: rtl; text-align: right;">' +
-                             '<tr style="background-color: #f4f4f4;">' +
-                               '<th style="padding: 10px;">' + (customerLabels['product_header'] || 'المنتج') + '</th>' +
-                               '<th style="padding: 10px; text-align: center;">' + (customerLabels['original_price_header'] || 'السعر الأصلي') + '</th>' +
-                               '<th style="padding: 10px; text-align: center;">' + (customerLabels['discounted_price_header'] || 'السعر بعد الخصم') + '</th>' +
-                               '<th style="padding: 10px; text-align: center;">' + (customerLabels['final_price_header'] || 'السعر النهائي') + '</th>' +
-                               '<th style="padding: 10px; text-align: center;">' + (customerLabels['quantity_header'] || 'الكمية') + '</th>' +
-                               '<th style="padding: 10px; text-align: center;">' + (customerLabels['total_header'] || 'الإجمالي') + '</th>' +
-                             '</tr>';
-        
-        if (order.items && order.items.length > 0) {
-          order.items.forEach(function(item) {
-            var origP = Number(item.originalPrice || item.price || 0);
-            var discP = Number(item.discountedPrice || origP);
-            var finalP = Number(item.finalPrice || discP);
-            var qty = Number(item.quantity || 1);
-            customerBody += '<tr>' +
-                              '<td style="padding: 8px;">' + String(item.title || '') + '</td>' +
-                              '<td style="padding: 8px; text-align: center;">' + origP.toFixed(0) + ' ฿</td>' +
-                              '<td style="padding: 8px; text-align: center;">' + discP.toFixed(0) + ' ฿</td>' +
-                              '<td style="padding: 8px; text-align: center;">' + finalP.toFixed(0) + ' ฿</td>' +
-                              '<td style="padding: 8px; text-align: center;">' + qty.toFixed(0) + '</td>' +
-                              '<td style="padding: 8px; text-align: center;">' + (finalP * qty).toFixed(0) + ' ฿</td>' +
-                            '</tr>';
-          });
-        }
-        
-        customerBody += '<tr style="background-color: #e0f2fe; font-weight: bold;">' +
-                          '<td colspan="5" style="padding: 10px; text-align: right;">' + (customerLabels['total_amount_label'] || 'الإجمالي الكلي') + '</td>' +
-                          '<td style="padding: 10px; text-align: center;">' + totalAmount.toFixed(0) + ' ฿</td>' +
-                        '</tr>' +
-                      '</table>' +
-                      '<hr>' +
-                      '<p>' + (customerLabels['contact_message'] || 'سنتواصل معك عبر LINE أو الهاتف لتأكيد التفاصيل وتوصيل الطلب.') + '</p>' +
-                      '<p>' + (customerLabels['inquiry_message'] || 'لأي استفسار، تواصل معنا عبر:') + '</p>' +
-                      '<ul>' +
-                        '<li>' + (customerLabels['line_label'] || 'LINE:') + ' ' + (settings.lineUrl ? ('<a href="' + settings.lineUrl + '">' + (customerLabels['line_click_here'] || 'اضغط هنا') + '</a>') : (customerLabels['line_not_available'] || 'غير متوفر')) + '</li>' +
-                        '<li>' + (customerLabels['mobile_label'] || 'الجوال:') + ' ' + order.phone + '</li>' +
-                      '</ul>' +
-                      '<p style="color: #059669; font-weight: bold;">' + (customerLabels['thank_you_message'] || 'شكرًا لثقتك بنا!') + '</p>';
-        
-        var customerEmailContent = customerEmailData.additionalContent || [];
-        var customerAttachments = [];
-        
-        // إرفاق الفاتورة الحالية للزبون
+        var adminBody = 
+          \'<div dir="rtl" style="font-family: \\'Cairo\\', \\'Segoe UI\\', Tahoma, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e5e5e5; border-radius: 16px; padding: 24px; background-color: #fcfbfa; color: #1c1917;">\' +
+            \'<div style="text-align: center; margin-bottom: 24px; border-bottom: 2px solid #d6bf77; padding-bottom: 16px;">\' +
+              \'<h2 style="color: #1c1917; font-family: serif; font-size: 24px; margin: 0;">طلب شراء جديد بالمتجر! 🔔</h2>\' +
+              \'<p style="font-size: 14px; color: #78716c; margin: 8px 0 0 0;">تم استلام وتوثيق طلب شراء جديد بقاعدة البيانات</p>\' +
+            \'</div>\' +
+            \'<p>مرحباً بك، لقد تلقيت طلب شراء جديد بالمتجر. إليك البيانات المباشرة للعميل والتفاصيل المالية للفاتورة:</p>\' +
+            
+            \'<div style="background-color: #faf9f6; padding: 15px; border-radius: 8px; border: 1px solid #f3f2ed; margin: 20px 0;">\' +
+              \'<p style="margin: 4px 0;"><strong>رقم الطلب:</strong> <span style="font-family: monospace; font-weight: bold; color: #c5a850;">\' + orderId + \'</span></p>\' +
+              \'<p style="margin: 4px 0;"><strong>تاريخ الطلب:</strong> \' + timestamp + \'</p>\' +
+              \'<p style="margin: 4px 0;"><strong>اسم العميل:</strong> \' + order.name + \'</p>\' +
+              \'<p style="margin: 4px 0;"><strong>رقم الجوال:</strong> \' + order.phone + \'</p>\' +
+              \'<p style="margin: 4px 0;"><strong>البريد الإلكتروني:</strong> \' + order.email + \'</p>\' +
+              \'<p style="margin: 4px 0;"><strong>عنوان التوصيل:</strong> \' + order.address + \'</p>\' +
+              \'<p style="margin: 4px 0;"><strong>كوبون الخصم:</strong> \' + (promoCode ? promoCode : \'لا يوجد\') + \'</p>\' +
+            \'</div>\' +
+            
+            \'<h3 style="color: #1c1917; font-size: 18px; margin-top: 24px;">المنتجات المطلوبة:</h3>\' +
+            productsHtmlTable +
+            
+            \'<p style="margin-top: 24px; font-weight: bold; color: #c5a850;">تجد نسخة رسمية من فاتورة العميل PDF مرفقة مع هذا البريد ومحفوظة بمجلد الفواتير في Google Drive.</p>\' +
+          \'</div>\';
+
+        var adminAttachments = [];
         if (pdfFile) {
-          try {
-            customerAttachments.push(pdfFile.getBlob());
-          } catch (blobErr) {
-            Logger.log('خطأ في إرفاق ملف PDF لإيميل العميل: ' + blobErr.message);
-          }
+          adminAttachments.push(pdfFile.getBlob());
         }
         
-        if (customerEmailContent.length > 0) {
-          customerBody += '<h3>' + customerAdditionalTitle + '</h3>';
-          customerEmailContent.forEach(function(item) {
-            if (item.type === 'text') {
-              customerBody += '<p><strong>' + item.description + ':</strong> ' + item.content + '</p>';
-            } else if (item.type === 'image') {
-              customerBody += '<p><strong>' + item.description + ':</strong></p>' +
-                              '<img src="https://drive.google.com/thumbnail?id=' + item.fileId + '" alt="' + item.description + '" style="max-width: 100%; height: auto; border-radius: 8px;">';
-            } else if (item.type === 'pdf') {
-              try {
-                var file = DriveApp.getFileById(item.fileId);
-                customerAttachments.push(file.getBlob());
-                customerBody += '<p><strong>' + item.description + ':</strong> ' + (customerLabels['pdf_attached'] || 'مرفق كملف PDF') + '</p>';
-              } catch (e) {
-                Logger.log('خطأ في إرفاق PDF إضافي للعميل: ' + e.message);
-                customerBody += '<p><strong>' + item.description + ':</strong> ' + (customerLabels['pdf_error'] || 'خطأ في إرفاق الملف: ') + e.message + '</p>';
-              }
-            }
-          });
-        }
-        
-        sendEmailHelper(targetCustomerEmail, customerSubject, customerBody, customerAttachments);
-      } catch (custErr) {
-        Logger.log('خطأ في إرسال إيميل العميل: ' + custErr.message);
+        sendEmailHelper(settings.recipientEmail, \'طلب شراء جديد رقم \' + orderId + \' 🔔\', adminBody, adminAttachments);
+      } catch (adminErr) {
+        Logger.log(\'خطأ في إرسال بريد المشرف: \' + adminErr.message);
       }
     }
   } catch (err) {
-    Logger.log('خطأ كلي في نظام البريد: ' + err.message);
+    Logger.log(\'خطأ عام في نظام البريد الإلكتروني: \' + err.message);
   }
 }
 
+// دالة مساعدة عامة لإرسال البريد الإلكتروني مع إمكانية إرفاق ملفات ومراعاة الحصص والأخطاء
 function sendEmailHelper(to, subject, htmlBody, attachments) {
-  var cleanTo = String(to || '').trim();
+  var cleanTo = String(to || \'\').trim();
   if (!cleanTo) {
-    Logger.log('إلغاء الإرسال: الإيميل فارغ');
+    Logger.log(\'إلغاء الإرسال: الإيميل فارغ\');
     return;
   }
   
-  var plainText = 'شكراً لتواصلك مع متجر النخبة للخط العربي الفاخر. تم استلام رسالتك وتفاصيل طلبك بنجاح. سنقوم بمتابعة طلبك والتواصل معك عبر الهاتف أو LINE قريباً جداً.';
+  var plainText = \'شكراً لتواصلك مع متجر النخبة للخط العربي الفاخر. تم استلام رسالتك وتفاصيل طلبك بنجاح. سنقوم بمتابعة طلبك والتواصل معك عبر الهاتف أو LINE قريباً جداً.\';
   
   var options = {
     htmlBody: htmlBody,
-    name: 'متجر النخبة للخط العربي'
+    name: \'متجر النخبة للخط العربي\'
   };
   if (attachments && attachments.length > 0) {
     options.attachments = attachments;
@@ -818,30 +678,37 @@ function sendEmailHelper(to, subject, htmlBody, attachments) {
   
   try {
     GmailApp.sendEmail(cleanTo, subject, plainText, options);
-    Logger.log('تم إرسال الإيميل بنجاح عبر GmailApp إلى: ' + cleanTo);
+    Logger.log(\'تم إرسال الإيميل بنجاح عبر GmailApp إلى: \' + cleanTo);
   } catch (e) {
-    Logger.log('فشل الإرسال عبر GmailApp: ' + e.message + '. جاري المحاولة عبر MailApp...');
+    Logger.log(\'فشل الإرسال عبر GmailApp: \' + e.message + \'. جاري المحاولة عبر MailApp...\');
     try {
       var mailOptions = {
         to: cleanTo,
         subject: subject,
         body: plainText,
         htmlBody: htmlBody,
-        name: 'متجر النخبة للخط العربي'
+        name: \'متجر النخبة للخط العربي\'
       };
       if (attachments && attachments.length > 0) {
         mailOptions.attachments = attachments;
       }
       MailApp.sendEmail(mailOptions);
-      Logger.log('تم إرسال الإيميل بنجاح عبر MailApp إلى: ' + cleanTo);
+      Logger.log(\'تم إرسال الإيميل بنجاح عبر MailApp إلى: \' + cleanTo);
     } catch (e2) {
-      Logger.log('فشل الإرسال كلياً: ' + e2.message);
+      Logger.log(\'فشل الإرسال كلياً: \' + e2.message);
     }
   }
 }
 
+// الدوال المساعدة لاستخراج المعرفات
 function extractFileId(url) {
-  var regex = /\/d\/([a-zA-Z0-9_-]+)/;
+  var regex = /\\/d\\/([a-zA-Z0-9_-]+)/;
+  var match = String(url).match(regex);
+  return match && match[1] ? match[1] : url;
+}
+
+function extractYouTubeId(url) {
+  var regex = /(?:youtube\\.com\\/(?:[^\\/]+\\/.+\\/|(?:v|e(?:mbed)?)\\/|.*[?&]v=)|youtu\\.be\\/)([a-zA-Z0-9_-]{11})/;
   var match = String(url).match(regex);
   return match && match[1] ? match[1] : null;
 }
