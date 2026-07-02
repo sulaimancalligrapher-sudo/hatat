@@ -1,43 +1,18 @@
-@import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;900&family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=JetBrains+Mono:wght@400;700&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Tajawal", "Inter", sans-serif;
-  --font-serif: "Playfair Display", serif;
-  --font-mono: "JetBrains Mono", monospace;
-  
-  --color-gold-50: #fbf8f1;
-  --color-gold-100: #f4edd4;
-  --color-gold-200: #e7daaa;
-  --color-gold-300: #d6bf77;
-  --color-gold-400: #c5a349;
-  --color-gold-500: #af8530;
-  --color-gold-600: #8e6522;
-  --color-gold-700: #6a461b;
-  --color-gold-800: #4f3216;
-  --color-gold-900: #3b2311;
+  --font-sans: "Tajawal", "Cairo", system-ui, -apple-system, sans-serif;
+  --font-serif: "Amiri", serif;
+  --color-brand-green: #0d5c3a;
+  --color-brand-gold: #c5a85c;
 }
 
 body {
   font-family: var(--font-sans);
-  background-color: #faf9f6;
-  color: #1c1917;
-  direction: rtl;
 }
 
-/* Custom scrollbars */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-::-webkit-scrollbar-track {
-  background: #f1f1f1;
-}
-::-webkit-scrollbar-thumb {
-  background: #d6bf77;
-  border-radius: 3px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #af8530;
+/* Custom styles for professional drawings */
+.canvas-container {
+  touch-action: none;
 }
 
