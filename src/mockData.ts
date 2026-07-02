@@ -1,4 +1,34 @@
-import { Product, PromoCode, Order, Member, StoreSettings } from './types';
+import { Product, PromoCode, Student, Order, Member, StoreSettings, StoreTexts } from './types';
+
+export const MOCK_TEXTS: StoreTexts = {
+  logoImage: '',
+  logoLetter: 'خ',
+  brandName: 'خطاط',
+  brandSubtitle: 'للفنون والخط العربي',
+  heroTitle: 'موقع النخبة للخط العربي والزخرفة الإسلامية',
+  heroBadgeText: 'تحف فنية أصلية للخط العربي والزخرفة الإسلامية',
+  heroSubtitle: 'اقتنِ أجمل اللوحات والتحف الجدارية والمخطوطات الخاصة المصنوعة بأيدي أمهر الخطاطين المحترفين على مر الزمن لتزيين جدران بيتك بذكر الله.',
+  searchPlaceholder: 'ابحث عن لوحة آية الكرسي، أسماء الله الحسنى، أدوات...',
+  categoryAllText: 'كل الأقسام والمعروضات',
+  tabShopText: 'المتجر',
+  tabMembersText: 'نادي العضوية',
+  tabAdminText: 'لوحة الإدارة',
+  discountLabelText: 'خصم',
+  offersTitle: 'عروض وتخفيضات خاصة وحصرية',
+  offersSubtitle: 'فرصتك لاقتناء تحف فنية نادرة ومميزة بأسعار خاصة لفترة محدودة',
+  activeNowText: 'نشط الآن',
+  categoryPillAllText: 'الكل',
+  footerIntroText: 'متجر متخصص بإنتاج وبيع اللوحات الجدارية الفاخرة للخط العربي والزخرفة الإسلامية، مكتوبة ومحفورة ومذهبة بأيدي خطاطين محترفين لتناسب الأذواق الرفيعة والمحترمة.',
+  footerQuickLinksTitle: 'أقسام ومفاتيح سريعة',
+  footerLinkBrowse: 'تصفح المعرض',
+  footerLinkSubscribe: 'اشترك بالعضوية',
+  footerLinkAdmin: 'بوابة الإدارة',
+  footerLinkOffers: 'عروض وتخفيضات',
+  footerContactTitle: 'تواصل فوري ومتابعة',
+  footerContactDesc: 'يسر خدمة العملاء والطلبات الخاصة استقبال تساؤلاتكم واستفساراتكم حول اللوحات المخصصة بالاسم طوال اليوم.',
+  footerTermsOfUse: 'شروط الاستخدام',
+  footerPrivacyPolicy: 'سياسة الخصوصية وتأمين البيانات'
+};
 
 export const MOCK_SETTINGS: StoreSettings = {
   headerImageUrl: 'https://images.unsplash.com/photo-1561214115-f2f134cc4912?q=80&w=600&auto=format&fit=crop', // Beautiful artistic workspace
@@ -114,20 +144,68 @@ export const MOCK_PRODUCTS: Product[] = [
 export const MOCK_PROMO_CODES: PromoCode[] = [
   {
     code: 'WELCOME10',
-    discount: 0.10,
+    type: 'percentage',
+    value: 0.10,
+    minSpend: 0,
+    usageCount: 0,
+    categoryType: 'member',
+    usedByContacts: [],
     eligibleProducts: 'all',
-    status: 'active'
+    status: 'active',
+    discount: 0.10
   },
   {
     code: 'GOLD20',
-    discount: 0.20,
+    type: 'percentage',
+    value: 0.20,
+    minSpend: 100,
+    usageCount: 0,
+    categoryType: 'general',
+    usedByContacts: [],
     eligibleProducts: 'لوحة آية الكرسي بخط الثلث الجلي, مخطوطة أسماء الله الحسنى الدائرية',
-    status: 'active'
+    status: 'active',
+    discount: 0.20
   },
   {
     code: 'RAMADAN',
-    discount: 0.15,
+    type: 'percentage',
+    value: 0.15,
+    minSpend: 200,
+    usageCount: 0,
+    categoryType: 'general',
+    usedByContacts: [],
     eligibleProducts: 'all',
+    status: 'active',
+    discount: 0.15
+  },
+  {
+    code: 'STUDENT50',
+    type: 'percentage',
+    value: 0.50,
+    minSpend: 0,
+    usageCount: 0,
+    categoryType: 'student',
+    assignedIdentifier: '202601',
+    usedByContacts: [],
+    eligibleProducts: 'all',
+    status: 'active',
+    discount: 0.50
+  }
+];
+
+export const MOCK_STUDENTS: Student[] = [
+  {
+    studentId: '202601',
+    name: 'عبدالرحمن بن ثامر',
+    email: 'abdulrahman@student.com',
+    phone: '0555555551',
+    status: 'active'
+  },
+  {
+    studentId: '202602',
+    name: 'سليمان الحربي',
+    email: 'sulaiman@student.com',
+    phone: '0555555552',
     status: 'active'
   }
 ];

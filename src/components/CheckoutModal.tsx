@@ -6,13 +6,21 @@ interface CheckoutModalProps {
   isOpen: boolean;
   onClose: () => void;
   cart: CartItem[];
-  appliedPromo: { code: string; discount: number; eligibleProducts: string } | null;
+  appliedPromo: { 
+    code: string; 
+    discount: number; 
+    eligibleProducts: string;
+    type?: 'percentage' | 'fixed' | 'shipping';
+    value?: number;
+    categoryType?: string;
+  } | null;
   onPlaceOrder: (order: {
     name: string;
     address: string;
     phone: string;
     email: string;
     promoCode: string;
+    studentId?: string;
   }) => Promise<{ status: string; orderId?: string; message?: string }>;
   clearCart: () => void;
 }
@@ -33,6 +41,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     lineId: ''
   });
 
+  const [studentId, setStudentId] = useState('');
   const [captchaInput, setCaptchaInput] = useState('');
   // Dynamic random simple math captcha (to prevent spam)
   const [num1] = useState(Math.floor(Math.random() * 9) + 1);
@@ -59,12 +68,18 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         appliedPromo.eligibleProducts.toLowerCase().includes(item.title.toLowerCase());
       
       if (isEligible) {
-        discountAmount += itemSubtotal * appliedPromo.discount;
+        if (appliedPromo.type === 'percentage' || !appliedPromo.type) {
+          discountAmount += itemSubtotal * (appliedPromo.value !== undefined ? appliedPromo.value : appliedPromo.discount);
+        }
       }
     }
   });
 
-  const total = subtotal - discountAmount;
+  if (appliedPromo && appliedPromo.type === 'fixed') {
+    discountAmount = appliedPromo.value || 0;
+  }
+
+  const total = Math.max(0, subtotal - discountAmount);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setFormData({
@@ -95,6 +110,11 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       return;
     }
 
+    if (appliedPromo && appliedPromo.categoryType === 'student' && !studentId.trim()) {
+      setErrorMsg('يرجى إدخال رقمك الطلابي المعتمد لتأكيد هذا الخصم الطلابي');
+      return;
+    }
+
     // Anti-spam math test
     if (parseInt(captchaInput) !== (num1 + num2)) {
       setErrorMsg('إجابة التحقق الأمني غير صحيحة، يرجى المحاولة مرة أخرى');
@@ -109,7 +129,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         address: formData.address.trim() + (formData.lineId.trim() ? ` (LINE ID: ${formData.lineId.trim()})` : ''),
         phone: formData.phone.trim(),
         email: formData.email.trim(),
-        promoCode: appliedPromo ? appliedPromo.code : ''
+        promoCode: appliedPromo ? appliedPromo.code : '',
+        studentId: studentId.trim()
       };
 
       const result = await onPlaceOrder(orderPayload);
@@ -128,6 +149,15 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const handleCheckoutSuccessClose = () => {
     clearCart();
     setPlacedOrderId(null);
+    setFormData({
+      name: '',
+      address: '',
+      phone: '',
+      email: '',
+      lineId: ''
+    });
+    setStudentId('');
+    setCaptchaInput('');
     onClose();
   };
 
@@ -171,6 +201,12 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 <span className="text-stone-500">البريد الإلكتروني المعتمد:</span>
                 <span className="font-semibold text-stone-900">{formData.email}</span>
               </div>
+              {studentId && (
+                <div className="flex justify-between">
+                  <span className="text-stone-500">الرقم الطلابي:</span>
+                  <span className="font-semibold text-stone-900">{studentId}</span>
+                </div>
+              )}
               {appliedPromo && (
                 <div className="flex justify-between">
                   <span className="text-stone-500">الكود الترويجي المطبق:</span>
@@ -307,6 +343,28 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                     </div>
                   </div>
                 </div>
+
+                {/* Student ID if student-only coupon */}
+                {appliedPromo && appliedPromo.categoryType === 'student' && (
+                  <div className="p-4 bg-amber-500/5 border border-gold-300/40 rounded-2xl space-y-2 animate-fade-in">
+                    <label className="block text-stone-800 text-xs font-bold">
+                      🎓 رمز الطالب الجامعي / المدرسي:
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        required
+                        value={studentId}
+                        onChange={(e) => setStudentId(e.target.value)}
+                        placeholder="أدخل رقمك الطلابي المعتمد لتأكيد الخصم (مثال: 202601)"
+                        className="w-full pr-10 pl-4 py-2.5 border border-stone-200 rounded-xl outline-none focus:border-gold-500 bg-stone-50 text-xs font-bold text-stone-950"
+                      />
+                    </div>
+                    <p className="text-[10px] text-stone-500 leading-relaxed">
+                      هذا الكوبون مخصص للطلاب فقط. سيقوم النظام بمطابقة رقم الطالب المسجل لتوثيق صلاحية الخصم.
+                    </p>
+                  </div>
+                )}
 
                 {/* Address */}
                 <div>

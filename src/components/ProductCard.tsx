@@ -1,9 +1,10 @@
 import React from 'react';
-import { Eye, ShoppingCart, Tag } from 'lucide-react';
-import { Product } from '../types';
+import { Eye, ShoppingCart } from 'lucide-react';
+import { Product, StoreTexts } from '../types';
 
 interface ProductCardProps {
   product: Product;
+  texts?: StoreTexts;
   onViewDetails: (product: Product) => void;
   onAddToCart: (product: Product) => void;
   isInCart: boolean;
@@ -11,6 +12,7 @@ interface ProductCardProps {
 
 export const ProductCard: React.FC<ProductCardProps> = ({
   product,
+  texts,
   onViewDetails,
   onAddToCart,
   isInCart
@@ -35,17 +37,11 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             e.currentTarget.src = "https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?q=80&w=600&auto=format&fit=crop";
           }}
         />
-        
-        {/* Category Tag */}
-        <div className="absolute top-3 right-3 bg-stone-900/80 backdrop-blur-xs text-gold-300 text-xs px-2.5 py-1 rounded-full flex items-center gap-1 font-medium border border-gold-500/20">
-          <Tag size={10} />
-          <span>{product.category}</span>
-        </div>
 
         {/* Discount Badge */}
         {hasDiscount && (
-          <div className="absolute top-3 left-3 bg-amber-600 text-white text-xs px-2.5 py-1 rounded-full font-bold shadow-md">
-            خصم {discountPercent}%
+          <div className="absolute top-3 left-3 bg-amber-600 text-white text-xs px-2.5 py-1 rounded-full font-bold shadow-md animate-fade-in">
+            {texts?.discountLabelText || 'خصم'} {discountPercent}%
           </div>
         )}
 

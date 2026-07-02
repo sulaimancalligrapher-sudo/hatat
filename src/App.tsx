@@ -7,8 +7,8 @@ import { CartDrawer } from './components/CartDrawer';
 import { CheckoutModal } from './components/CheckoutModal';
 import { MemberRegister } from './components/MemberRegister';
 import { AdminPanel } from './components/AdminPanel';
-import { Product, Order, PromoCode, Member, StoreSettings, CartItem } from './types';
-import { MOCK_SETTINGS, MOCK_PRODUCTS, MOCK_PROMO_CODES, MOCK_MEMBERS, MOCK_ORDERS } from './mockData';
+import { Product, Order, PromoCode, Student, Member, StoreSettings, CartItem, StoreTexts } from './types';
+import { MOCK_SETTINGS, MOCK_PRODUCTS, MOCK_PROMO_CODES, MOCK_STUDENTS, MOCK_MEMBERS, MOCK_ORDERS, MOCK_TEXTS } from './mockData';
 
 export default function App() {
   // Navigation & UI States
@@ -27,10 +27,12 @@ export default function App() {
 
   // Core Store States
   const [settings, setSettings] = useState<StoreSettings>(MOCK_SETTINGS);
+  const [texts, setTexts] = useState<StoreTexts>(MOCK_TEXTS);
   const [products, setProducts] = useState<Product[]>(MOCK_PRODUCTS);
   const [promoCodes, setPromoCodes] = useState<PromoCode[]>(MOCK_PROMO_CODES);
   const [members, setMembers] = useState<Member[]>(MOCK_MEMBERS);
   const [orders, setOrders] = useState<Order[]>(MOCK_ORDERS);
+  const [students, setStudents] = useState<Student[]>(MOCK_STUDENTS);
 
   // Cart Local Storage Persistence
   const [cart, setCart] = useState<CartItem[]>(() => {
@@ -38,7 +40,14 @@ export default function App() {
     return savedCart ? JSON.parse(savedCart) : [];
   });
   
-  const [appliedPromo, setAppliedPromo] = useState<{ code: string; discount: number; eligibleProducts: string } | null>(null);
+  const [appliedPromo, setAppliedPromo] = useState<{ 
+    code: string; 
+    discount: number; 
+    eligibleProducts: string;
+    type?: 'percentage' | 'fixed' | 'shipping';
+    value?: number;
+    categoryType?: string;
+  } | null>(null);
 
   // Filtering / Search States
   const [searchQuery, setSearchQuery] = useState('');
@@ -60,10 +69,12 @@ export default function App() {
       setIsDemoMode(true);
       // Reset to default mock data
       setSettings(MOCK_SETTINGS);
+      setTexts(MOCK_TEXTS);
       setProducts(MOCK_PRODUCTS);
       setPromoCodes(MOCK_PROMO_CODES);
       setMembers(MOCK_MEMBERS);
       setOrders(MOCK_ORDERS);
+      setStudents(MOCK_STUDENTS);
     }
   }, [sheetsUrl]);
 
@@ -94,14 +105,75 @@ export default function App() {
       if (generalResponse.ok) {
         const liveData = await generalResponse.json();
         if (liveData && !liveData.status) {
+          if (liveData.texts && Array.isArray(liveData.texts)) {
+            const parsedTexts: any = {};
+            liveData.texts.forEach((row: any) => {
+              const key = row[0];
+              const value = row[1];
+              if (key) {
+                const camelKey = key.replace(/_([a-z])/g, (g: string) => g[1].toUpperCase());
+                parsedTexts[camelKey] = value;
+              }
+            });
+            setTexts(prev => ({ ...prev, ...parsedTexts }));
+          }
           if (liveData.promoCodes && Array.isArray(liveData.promoCodes)) {
-            const parsedCodes: PromoCode[] = liveData.promoCodes.map((row: any) => ({
-              code: row[0],
-              discount: parseFloat(row[1]) || 0.1,
-              eligibleProducts: row[2] || 'all',
-              status: row[3] === 'active' ? 'active' : 'inactive'
-            }));
+            const parsedCodes: PromoCode[] = liveData.promoCodes.map((row: any) => {
+              if (row && typeof row === 'object' && !Array.isArray(row)) {
+                return {
+                  code: row.code || '',
+                  type: row.type || 'percentage',
+                  value: row.value || 0,
+                  minSpend: row.minSpend || 0,
+                  expiryDate: row.expiryDate || '',
+                  usageLimit: row.usageLimit || 999999,
+                  usageCount: row.usageCount || 0,
+                  categoryType: row.categoryType || 'general',
+                  assignedIdentifier: row.assignedIdentifier || '',
+                  usedByContacts: row.usedByContacts || [],
+                  customerUsageLimit: row.customerUsageLimit,
+                  eligibleProducts: row.eligibleProducts || 'all',
+                  status: row.status || 'active',
+                  discount: row.type === 'percentage' ? (row.value || 0) : 0
+                };
+              }
+              const type = row[1] ? row[1].toString().trim().toLowerCase() : 'percentage';
+              const val = parseFloat(row[2]) || 0;
+              const statusVal = row[8] ? row[8].toString().trim().toLowerCase() : 'active';
+              const isActive = statusVal === 'true' || statusVal === 'نعم' || statusVal === 'active' || statusVal === 'نشط';
+              const targetGroupRaw = row[9] ? row[9].toString().trim().toLowerCase() : 'general';
+              const categoryType = (targetGroupRaw === 'طالب' || targetGroupRaw === 'طلاب' || targetGroupRaw === 'student') ? 'student' : 
+                                   (targetGroupRaw === 'عضو' || targetGroupRaw === 'أعضاء' || targetGroupRaw === 'member') ? 'member' : 'general';
+              
+              return {
+                code: row[0] ? row[0].toString().trim() : '',
+                type: type as any,
+                value: val,
+                minSpend: parseFloat(row[3]) || 0,
+                expiryDate: row[4] ? row[4].toString().trim() : '',
+                usageLimit: row[5] !== '' && row[5] !== undefined ? parseInt(row[5]) : undefined,
+                usageCount: parseInt(row[6]) || 0,
+                eligibleProducts: row[7] || 'all',
+                status: isActive ? 'active' : 'inactive',
+                categoryType: categoryType as any,
+                usedByContacts: row[10] ? row[10].toString().split(',').map((s: string) => s.trim()).filter(Boolean) : [],
+                customerUsageLimit: row[11] !== '' && row[11] !== undefined ? parseInt(row[11]) : undefined,
+                discount: type === 'percentage' ? val : 0
+              };
+            });
             setPromoCodes(parsedCodes);
+          }
+          if (liveData.students && Array.isArray(liveData.students)) {
+            const parsedStudents: Student[] = liveData.students.map((row: any) => ({
+              studentId: row[0] ? row[0].toString().trim() : '',
+              name: row[1] ? row[1].toString().trim() : '',
+              phone: row[2] ? row[2].toString().trim() : '',
+              email: row[3] ? row[3].toString().trim() : '',
+              registrationDate: row[4] ? row[4].toString().trim() : '',
+              usedCount: parseInt(row[5]) || 0,
+              status: (row[6] ? row[6].toString().trim().toLowerCase() : 'active') === 'inactive' || row[6] === 'موقف' ? 'inactive' : 'active'
+            }));
+            setStudents(parsedStudents);
           }
           if (liveData.members && Array.isArray(liveData.members)) {
             const parsedMembers: Member[] = liveData.members.map((row: any) => ({
@@ -181,7 +253,21 @@ export default function App() {
   };
 
   // Validate promotional code (either local or cloud-based)
-  const handleApplyPromo = async (code: string): Promise<{ valid: boolean; discount: number; message: string; eligibleProducts: string }> => {
+  const handleApplyPromo = async (
+    code: string,
+    email?: string,
+    phone?: string,
+    subtotal?: number,
+    studentId?: string
+  ): Promise<{ 
+    valid: boolean; 
+    discount: number; 
+    message: string; 
+    eligibleProducts: string;
+    type?: 'percentage' | 'fixed' | 'shipping';
+    value?: number;
+    categoryType?: string;
+  }> => {
     const uppercaseCode = code.toUpperCase().trim();
     
     if (!isDemoMode && sheetsUrl) {
@@ -190,7 +276,14 @@ export default function App() {
           method: 'POST',
           mode: 'cors',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({ action: 'validate_promo', code: uppercaseCode })
+          body: JSON.stringify({ 
+            action: 'validate_promo', 
+            code: uppercaseCode,
+            email,
+            phone,
+            subtotal,
+            studentId
+          })
         });
         if (response.ok) {
           const res = await response.json();
@@ -198,7 +291,10 @@ export default function App() {
             valid: res.valid,
             discount: res.discount || 0,
             message: res.message || '',
-            eligibleProducts: res.eligibleProducts || 'all'
+            eligibleProducts: res.eligibleProducts || 'all',
+            type: res.type,
+            value: res.value,
+            categoryType: res.categoryType
           };
         }
       } catch (err) {
@@ -207,16 +303,121 @@ export default function App() {
     }
 
     // Local validation
-    const found = promoCodes.find(c => c.code === uppercaseCode);
+    let found = promoCodes.find(c => c.code === uppercaseCode);
+    if (!found) {
+      // If code is not a standard promo code, check if it's an active student ID directly!
+      const studentMatch = students.find(s => s.studentId.trim().toUpperCase() === uppercaseCode);
+      if (studentMatch) {
+        if (studentMatch.status !== 'active') {
+          return { valid: false, discount: 0, message: 'عذراً، الرقم الطلابي المدخل معطل أو غير نشط ❌', eligibleProducts: 'all' };
+        }
+        
+        // Find if there's any active promo code with target_group = student to borrow its rate!
+        const studentPromo = promoCodes.find(c => c.categoryType === 'student' && c.status === 'active');
+        const limit = studentPromo && studentPromo.customerUsageLimit !== undefined ? studentPromo.customerUsageLimit : 1;
+        if ((studentMatch.usedCount || 0) >= limit) {
+          return { valid: false, discount: 0, message: `عذراً، لقد استنفدت الحد الأقصى لاستخدام الرقم الطلابي للخصم (${limit} استخدام) 🛡️`, eligibleProducts: 'all' };
+        }
+
+        const discountType = studentPromo ? studentPromo.type : 'percentage';
+        const discountValue = studentPromo ? (studentPromo.value !== undefined ? studentPromo.value : studentPromo.discount) : 0.15; // 15% default fallback
+        
+        return {
+          valid: true,
+          discount: discountType === 'percentage' ? discountValue : 0,
+          message: `مرحباً بك يا ${studentMatch.name}! تم تطبيق خصم الطلاب المباشر بنجاح 🎓`,
+          eligibleProducts: studentPromo ? studentPromo.eligibleProducts : 'all',
+          type: discountType,
+          value: discountValue,
+          categoryType: 'student'
+        };
+      }
+    }
+
     if (found) {
       if (found.status !== 'active') {
         return { valid: false, discount: 0, message: 'هذا الكود معطل حالياً', eligibleProducts: 'all' };
       }
+
+      // A. Expiration Check
+      if (found.expiryDate) {
+        const todayStr = new Date().toISOString().split('T')[0];
+        if (todayStr > found.expiryDate) {
+          return { valid: false, discount: 0, message: 'عذراً، هذا الكوبون منتهي الصلاحية 📅', eligibleProducts: 'all' };
+        }
+      }
+
+      // B. Usage Limit Check
+      if (found.usageLimit !== undefined && found.usageCount >= found.usageLimit) {
+        return { valid: false, discount: 0, message: 'عذراً، تم الوصول للحد الأقصى لاستخدام الكوبون 🛑', eligibleProducts: 'all' };
+      }
+
+      // C. Min Spend Check
+      if (subtotal !== undefined && found.minSpend !== undefined && subtotal < found.minSpend) {
+        return { valid: false, discount: 0, message: `الحد الأدنى للشراء لتفعيل الكود هو ${found.minSpend} ريال`, eligibleProducts: 'all' };
+      }
+
+      // D. Customer Usage Limit Check
+      if (email || phone) {
+        const contactClean = (email || phone || '').trim().toLowerCase();
+        if (found.customerUsageLimit !== undefined && found.customerUsageLimit > 0) {
+          const timesUsed = found.usedByContacts ? found.usedByContacts.filter(c => c.toLowerCase() === contactClean).length : 0;
+          if (timesUsed >= found.customerUsageLimit) {
+            return { valid: false, discount: 0, message: `لقد استنفدت الحد الأقصى لاستخدام هذا الكوبون المسموح للعميل الواحد (${found.customerUsageLimit} مرات) 🛡️`, eligibleProducts: 'all' };
+          }
+        } else {
+          // If customerUsageLimit is not defined, default to 1 use per customer for member/student target groups as a safety
+          if (found.categoryType !== 'general' && found.usedByContacts && found.usedByContacts.some(c => c.toLowerCase() === contactClean)) {
+            return { valid: false, discount: 0, message: 'لقد استخدمت هذا الكوبون من قبل، وهو متاح لمرة واحدة فقط للعميل 🛡️', eligibleProducts: 'all' };
+          }
+        }
+      }
+
+      // E. Student Verification
+      if (found.categoryType === 'student') {
+        if (!studentId) {
+          return {
+            valid: true,
+            discount: found.type === 'percentage' ? found.value : 0,
+            message: 'كود طلابي مميز! سيتم التحقق من رقمك الطلابي عند إتمام الطلب 🎓',
+            eligibleProducts: found.eligibleProducts,
+            type: found.type,
+            value: found.value,
+            categoryType: 'student'
+          };
+        } else {
+          const student = students.find(s => s.studentId.trim() === studentId.trim());
+          if (!student) {
+            return { valid: false, discount: 0, message: 'الرقم الطلابي غير مسجل بالنظام ❌', eligibleProducts: 'all' };
+          }
+          if (student.status !== 'active') {
+            return { valid: false, discount: 0, message: 'الرقم الطلابي غير نشط أو معطل ❌', eligibleProducts: 'all' };
+          }
+          const limit = found.customerUsageLimit !== undefined ? found.customerUsageLimit : 1;
+          if ((student.usedCount || 0) >= limit) {
+            return { valid: false, discount: 0, message: `عذراً، الرقم الطلابي المدخل تجاوز الحد الأقصى المسموح لاستخدامه للخصم (${limit} استخدام) 🛡️`, eligibleProducts: 'all' };
+          }
+        }
+      }
+
+      // F. Member Verification
+      if (found.categoryType === 'member') {
+        if (email || phone) {
+          const matchedMember = members.find(m => m.email.toLowerCase() === email?.toLowerCase() || m.phone === phone);
+          if (!matchedMember) {
+            return { valid: false, discount: 0, message: 'عذراً، هذا الكوبون مخصص للأعضاء المشتركين فقط 💎', eligibleProducts: 'all' };
+          }
+        }
+      }
+
       return {
         valid: true,
-        discount: found.discount,
+        discount: found.type === 'percentage' ? found.value : 0,
         message: 'تم تطبيق كود الخصم بنجاح! ✅',
-        eligibleProducts: found.eligibleProducts
+        eligibleProducts: found.eligibleProducts,
+        type: found.type,
+        value: found.value,
+        categoryType: found.categoryType
       };
     }
     return { valid: false, discount: 0, message: 'الكود المكتوب غير صحيح أو منتهي', eligibleProducts: 'all' };
@@ -229,6 +430,7 @@ export default function App() {
     phone: string;
     email: string;
     promoCode: string;
+    studentId?: string;
   }): Promise<{ status: string; orderId?: string; message?: string }> => {
     const orderId = 'ORD' + new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14) + Math.floor(Math.random() * 1000);
     const timestamp = new Date().toLocaleString('ar-EG');
@@ -236,18 +438,41 @@ export default function App() {
     const quantitiesList = cart.map(item => item.quantity).join(', ');
     
     let subtotal = 0;
+    cart.forEach(item => {
+      subtotal += item.discountedPrice * item.quantity;
+    });
+
+    // Re-verify the promo code with the actual checkout details right before submitting the order!
+    if (appliedPromo) {
+      const validation = await handleApplyPromo(
+        appliedPromo.code,
+        orderDetails.email,
+        orderDetails.phone,
+        subtotal,
+        orderDetails.studentId || appliedPromo.code
+      );
+      if (!validation.valid) {
+        return { status: 'error', message: validation.message || 'كود الخصم غير صالح للتطبيق على بيانات هذا الطلب 🛡️' };
+      }
+    }
+
     let discountAmount = 0;
     cart.forEach(item => {
       const itemSub = item.discountedPrice * item.quantity;
-      subtotal += itemSub;
       if (appliedPromo) {
         const isEligible = appliedPromo.eligibleProducts === 'all' || appliedPromo.eligibleProducts === 'ALL' || appliedPromo.eligibleProducts.toLowerCase().includes(item.title.toLowerCase());
         if (isEligible) {
-          discountAmount += itemSub * appliedPromo.discount;
+          if (appliedPromo.type === 'percentage' || !appliedPromo.type) {
+            discountAmount += itemSub * (appliedPromo.value !== undefined ? appliedPromo.value : appliedPromo.discount);
+          }
         }
       }
     });
-    const finalTotal = subtotal - discountAmount;
+
+    if (appliedPromo && appliedPromo.type === 'fixed') {
+      discountAmount = appliedPromo.value || 0;
+    }
+    const finalTotal = Math.max(0, subtotal - discountAmount);
 
     const newOrderRecord: Order = {
       orderId,
@@ -278,7 +503,8 @@ export default function App() {
               address: orderDetails.address,
               phone: orderDetails.phone,
               email: orderDetails.email,
-              promoCode: orderDetails.promoCode
+              promoCode: orderDetails.promoCode,
+              studentId: orderDetails.studentId
             }
           })
         });
@@ -292,6 +518,41 @@ export default function App() {
               telegramSent: res.telegramSent || 'تم الإرسال',
               pdfLink: res.pdfLink || '#'
             };
+            
+            // Increment local state too for immediate feedback
+            if (appliedPromo) {
+              setPromoCodes(prev => prev.map(c => {
+                if (c.code === appliedPromo.code) {
+                  const cleanContact = (orderDetails.email || orderDetails.phone || '').trim().toLowerCase();
+                  const usedByContacts = [...(c.usedByContacts || [])];
+                  // In K column, we append the contact even if they used it before (for tracing every order usage)
+                  if (cleanContact) {
+                    usedByContacts.push(cleanContact);
+                  }
+                  return {
+                    ...c,
+                    usageCount: c.usageCount + 1,
+                    usedByContacts
+                  };
+                }
+                return c;
+              }));
+            }
+
+            // Increment student usage count
+            const targetStudentId = orderDetails.studentId || (appliedPromo && students.some(s => s.studentId.toUpperCase() === appliedPromo.code.toUpperCase()) ? appliedPromo.code : '');
+            if (targetStudentId) {
+              setStudents(prev => prev.map(s => {
+                if (s.studentId.trim().toUpperCase() === targetStudentId.trim().toUpperCase()) {
+                  return {
+                    ...s,
+                    usedCount: (s.usedCount || 0) + 1
+                  };
+                }
+                return s;
+              }));
+            }
+
             // Append cloud order to state
             setOrders(prev => [finalOrderRecord, ...prev]);
             return { status: 'success', orderId: res.orderId || orderId };
@@ -308,6 +569,38 @@ export default function App() {
     }
 
     // Local / Demo Mode success path
+    if (appliedPromo) {
+      setPromoCodes(prev => prev.map(c => {
+        if (c.code === appliedPromo.code) {
+          const cleanContact = (orderDetails.email || orderDetails.phone || '').trim().toLowerCase();
+          const usedByContacts = [...(c.usedByContacts || [])];
+          if (cleanContact) {
+            usedByContacts.push(cleanContact);
+          }
+          return {
+            ...c,
+            usageCount: c.usageCount + 1,
+            usedByContacts
+          };
+        }
+        return c;
+      }));
+    }
+
+    // Increment student usage count in local mode
+    const targetStudentIdLocal = orderDetails.studentId || (appliedPromo && students.some(s => s.studentId.toUpperCase() === appliedPromo.code.toUpperCase()) ? appliedPromo.code : '');
+    if (targetStudentIdLocal) {
+      setStudents(prev => prev.map(s => {
+        if (s.studentId.trim().toUpperCase() === targetStudentIdLocal.trim().toUpperCase()) {
+          return {
+            ...s,
+            usedCount: (s.usedCount || 0) + 1
+          };
+        }
+        return s;
+      }));
+    }
+
     setOrders(prev => [newOrderRecord, ...prev]);
     return { status: 'success', orderId };
   };
@@ -388,6 +681,7 @@ export default function App() {
       {/* Top Banner Navigation bar */}
       <Navbar
         settings={settings}
+        texts={texts}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         cartCount={cart.reduce((sum, item) => sum + item.quantity, 0)}
@@ -414,15 +708,15 @@ export default function App() {
             <div className="relative z-10 max-w-5xl mx-auto px-4 py-16 sm:py-24 text-center space-y-6">
               <div className="inline-flex items-center gap-2 px-3 py-1 bg-gold-500/10 text-gold-300 rounded-full text-xs font-bold border border-gold-500/20 shadow-md">
                 <Sparkles size={14} className="animate-pulse" />
-                <span>تحف فنية أصلية للخط العربي والزخرفة الإسلامية</span>
+                <span>{texts.heroBadgeText || 'تحف فنية أصلية للخط العربي والزخرفة الإسلامية'}</span>
               </div>
               
               <h1 className="font-serif text-3xl sm:text-5xl font-black tracking-tight leading-tight text-transparent bg-clip-text bg-gradient-to-r from-gold-100 via-gold-300 to-gold-100">
-                {settings.pageTitle}
+                {texts.heroTitle || settings.pageTitle}
               </h1>
               
               <p className="text-stone-400 text-sm sm:text-base max-w-2xl mx-auto font-light leading-relaxed">
-                اقتنِ أجمل اللوحات والتحف الجدارية والمخطوطات الخاصة المصنوعة بأيدي أمهر الخطاطين المحترفين على مر الزمن لتزيين جدران بيتك بذكر الله.
+                {texts.heroSubtitle || 'اقتنِ أجمل اللوحات والتحف الجدارية والمخطوطات الخاصة المصنوعة بأيدي أمهر الخطاطين المحترفين على مر الزمن لتزيين جدران بيتك بذكر الله.'}
               </p>
 
               {/* Combined Categories & Search Panel */}
@@ -435,7 +729,7 @@ export default function App() {
                       type="text"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="ابحث عن لوحة آية الكرسي، أسماء الله الحسنى، أدوات..."
+                      placeholder={texts.searchPlaceholder || 'ابحث عن لوحة آية الكرسي، أسماء الله الحسنى، أدوات...'}
                       className="w-full pl-4 pr-10 py-3 bg-stone-950 text-white border border-stone-800 rounded-xl outline-none focus:border-gold-500 text-xs placeholder:text-stone-500 font-medium"
                     />
                     <Search size={16} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-stone-400" />
@@ -448,7 +742,7 @@ export default function App() {
                       onChange={(e) => setSelectedCategory(e.target.value)}
                       className="w-full px-4 py-3 bg-stone-950 text-gold-300 border border-stone-800 rounded-xl outline-none focus:border-gold-500 text-xs font-bold cursor-pointer"
                     >
-                      <option value="all">كل الأقسام والمعروضات</option>
+                      <option value="all">{texts.categoryAllText || 'كل الأقسام والمعروضات'}</option>
                       {settings.keywords.map((kw, idx) => (
                         <option key={idx} value={kw}>{kw}</option>
                       ))}
@@ -471,12 +765,12 @@ export default function App() {
                       <Percent size={16} />
                     </div>
                     <div>
-                      <h2 className="font-serif text-lg md:text-xl font-bold text-stone-900">عروض وتخفيضات خاصة وحصرية</h2>
-                      <p className="text-stone-500 text-[11px] mt-0.5">فرصتك لاقتناء تحف فنية نادرة ومميزة بأسعار خاصة لفترة محدودة</p>
+                      <h2 className="font-serif text-lg md:text-xl font-bold text-stone-900">{texts.offersTitle || 'عروض وتخفيضات خاصة وحصرية'}</h2>
+                      <p className="text-stone-500 text-[11px] mt-0.5">{texts.offersSubtitle || 'فرصتك لاقتناء تحف فنية نادرة ومميزة بأسعار خاصة لفترة محدودة'}</p>
                     </div>
                   </div>
                   <span className="text-xs font-bold text-gold-600 bg-gold-100/50 px-3 py-1 rounded-full border border-gold-200">
-                    نشط الآن
+                    {texts.activeNowText || 'نشط الآن'}
                   </span>
                 </div>
 
@@ -485,6 +779,7 @@ export default function App() {
                     <ProductCard
                       key={prod.fileId}
                       product={prod}
+                      texts={texts}
                       onViewDetails={(p) => setSelectedProduct(p)}
                       onAddToCart={(p) => handleAddToCart(p)}
                       isInCart={cart.some(item => item.fileId === prod.fileId)}
@@ -513,7 +808,7 @@ export default function App() {
                       : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'
                   }`}
                 >
-                  الكل
+                  {texts.categoryPillAllText || 'الكل'}
                 </button>
                 {settings.keywords.map((kw, idx) => (
                   <button
@@ -543,6 +838,7 @@ export default function App() {
                   <ProductCard
                     key={prod.fileId}
                     product={prod}
+                    texts={texts}
                     onViewDetails={(p) => setSelectedProduct(p)}
                     onAddToCart={(p) => handleAddToCart(p)}
                     isInCart={cart.some(item => item.fileId === prod.fileId)}
@@ -568,6 +864,7 @@ export default function App() {
             products={products}
             promoCodes={promoCodes}
             members={members}
+            students={students}
             settings={settings}
             isDemoMode={isDemoMode}
             sheetsUrl={sheetsUrl}
@@ -586,28 +883,28 @@ export default function App() {
             
             {/* Column 1: Store Intro */}
             <div className="space-y-4">
-              <span className="font-serif text-lg font-bold text-gold-400">{settings.pageTitle}</span>
+              <span className="font-serif text-lg font-bold text-gold-400">{texts.brandName || settings.pageTitle}</span>
               <p className="text-xs text-stone-400 leading-relaxed max-w-sm">
-                متجر متخصص بإنتاج وبيع اللوحات الجدارية الفاخرة للخط العربي والزخرفة الإسلامية، مكتوبة ومحفورة ومذهبة بأيدي خطاطين محترفين لتناسب الأذواق الرفيعة والمحترمة.
+                {texts.footerIntroText || 'متجر متخصص بإنتاج وبيع اللوحات الجدارية الفاخرة للخط العربي والزخرفة الإسلامية، مكتوبة ومحفورة ومذهبة بأيدي خطاطين محترفين لتناسب الأذواق الرفيعة والمحترمة.'}
               </p>
             </div>
 
             {/* Column 2: Quick Links */}
             <div className="space-y-3 text-xs">
-              <h4 className="font-bold text-stone-100 text-sm">أقسام ومفاتيح سريعة</h4>
+              <h4 className="font-bold text-stone-100 text-sm">{texts.footerQuickLinksTitle || 'أقسام ومفاتيح سريعة'}</h4>
               <div className="grid grid-cols-2 gap-2">
-                <button onClick={() => { setActiveTab('shop'); setSelectedCategory('all'); }} className="text-right hover:text-gold-400 transition-colors">تصفح المعرض</button>
-                <button onClick={() => { setActiveTab('member'); }} className="text-right hover:text-gold-400 transition-colors">اشترك بالعضوية</button>
-                <button onClick={() => { setActiveTab('admin'); }} className="text-right hover:text-gold-400 transition-colors">بوابة الإدارة</button>
-                <button onClick={() => { setActiveTab('shop'); }} className="text-right hover:text-gold-400 transition-colors">عروض وتخفيضات</button>
+                <button onClick={() => { setActiveTab('shop'); setSelectedCategory('all'); }} className="text-right hover:text-gold-400 transition-colors">{texts.footerLinkBrowse || 'تصفح المعرض'}</button>
+                <button onClick={() => { setActiveTab('member'); }} className="text-right hover:text-gold-400 transition-colors">{texts.footerLinkSubscribe || 'اشترك بالعضوية'}</button>
+                <button onClick={() => { setActiveTab('admin'); }} className="text-right hover:text-gold-400 transition-colors">{texts.footerLinkAdmin || 'بوابة الإدارة'}</button>
+                <button onClick={() => { setActiveTab('shop'); }} className="text-right hover:text-gold-400 transition-colors">{texts.footerLinkOffers || 'عروض وتخفيضات'}</button>
               </div>
             </div>
 
             {/* Column 3: Contact & LINE follow */}
             <div className="space-y-4 text-xs">
-              <h4 className="font-bold text-stone-100 text-sm">تواصل فوري ومتابعة</h4>
+              <h4 className="font-bold text-stone-100 text-sm">{texts.footerContactTitle || 'تواصل فوري ومتابعة'}</h4>
               <p className="text-stone-400 leading-relaxed text-[11px]">
-                يسر خدمة العملاء والطلبات الخاصة استقبال تساؤلاتكم واستفساراتكم حول اللوحات المخصصة بالاسم طوال اليوم.
+                {texts.footerContactDesc || 'يسر خدمة العملاء والطلبات الخاصة استقبال تساؤلاتكم واستفساراتكم حول اللوحات المخصصة بالاسم طوال اليوم.'}
               </p>
               
               {/* Social URLs List */}
@@ -625,10 +922,10 @@ export default function App() {
 
           {/* Legal / Copyright Footer bar */}
           <div className="flex flex-col sm:flex-row justify-between items-center gap-4 text-[11px] text-stone-500">
-            <span>© {new Date().getFullYear()} {settings.pageTitle}. جميع الحقوق محفوظة لورشة الخط العربي الإسلامي والخطاط.</span>
+            <span>© {new Date().getFullYear()} {texts.brandName || settings.pageTitle}. جميع الحقوق محفوظة لورشة الخط العربي الإسلامي والخطاط.</span>
             <div className="flex gap-4">
-              <span className="hover:text-stone-400 cursor-pointer">شروط الاستخدام</span>
-              <span className="hover:text-stone-400 cursor-pointer">سياسة الخصوصية وتأمين البيانات</span>
+              <span className="hover:text-stone-400 cursor-pointer">{texts.footerTermsOfUse || 'شروط الاستخدام'}</span>
+              <span className="hover:text-stone-400 cursor-pointer">{texts.footerPrivacyPolicy || 'سياسة الخصوصية وتأمين البيانات'}</span>
             </div>
           </div>
         </div>

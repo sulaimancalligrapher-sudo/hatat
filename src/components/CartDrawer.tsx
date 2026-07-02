@@ -9,9 +9,31 @@ interface CartDrawerProps {
   onUpdateQuantity: (index: number, change: number) => void;
   onRemoveItem: (index: number) => void;
   promoCodes: PromoCode[];
-  onApplyPromo: (code: string) => Promise<{ valid: boolean; discount: number; message: string; eligibleProducts: string }>;
-  appliedPromo: { code: string; discount: number; eligibleProducts: string } | null;
-  setAppliedPromo: (promo: { code: string; discount: number; eligibleProducts: string } | null) => void;
+  onApplyPromo: (code: string) => Promise<{ 
+    valid: boolean; 
+    discount: number; 
+    message: string; 
+    eligibleProducts: string;
+    type?: 'percentage' | 'fixed' | 'shipping';
+    value?: number;
+    categoryType?: string;
+  }>;
+  appliedPromo: { 
+    code: string; 
+    discount: number; 
+    eligibleProducts: string;
+    type?: 'percentage' | 'fixed' | 'shipping';
+    value?: number;
+    categoryType?: string;
+  } | null;
+  setAppliedPromo: (promo: { 
+    code: string; 
+    discount: number; 
+    eligibleProducts: string;
+    type?: 'percentage' | 'fixed' | 'shipping';
+    value?: number;
+    categoryType?: string;
+  } | null) => void;
   onProceedToCheckout: () => void;
 }
 
@@ -50,15 +72,21 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
           appliedPromo.eligibleProducts.toLowerCase().includes(item.title.toLowerCase());
         
         if (isEligible) {
-          discountAmount += itemSubtotal * appliedPromo.discount;
+          if (appliedPromo.type === 'percentage' || !appliedPromo.type) {
+            discountAmount += itemSubtotal * (appliedPromo.value !== undefined ? appliedPromo.value : appliedPromo.discount);
+          }
         }
       }
     });
 
+    if (appliedPromo && appliedPromo.type === 'fixed') {
+      discountAmount = appliedPromo.value || 0;
+    }
+
     return {
       subtotal,
       discountAmount,
-      total: subtotal - discountAmount
+      total: Math.max(0, subtotal - discountAmount)
     };
   };
 

@@ -1,9 +1,10 @@
 import React from 'react';
 import { ShoppingCart, LogIn, Store, UserPlus, Sliders, Shield } from 'lucide-react';
-import { StoreSettings } from '../types';
+import { StoreSettings, StoreTexts } from '../types';
 
 interface NavbarProps {
   settings: StoreSettings;
+  texts: StoreTexts;
   activeTab: string;
   setActiveTab: (tab: string) => void;
   cartCount: number;
@@ -14,6 +15,7 @@ interface NavbarProps {
 
 export const Navbar: React.FC<NavbarProps> = ({
   settings,
+  texts,
   activeTab,
   setActiveTab,
   cartCount,
@@ -28,15 +30,24 @@ export const Navbar: React.FC<NavbarProps> = ({
           
           {/* Brand/Logo Section */}
           <div className="flex items-center space-x-3 space-x-reverse cursor-pointer" onClick={() => setActiveTab('shop')}>
-            <div className="w-12 h-12 rounded-full border border-gold-400 bg-stone-900 flex items-center justify-center font-serif text-2xl text-gold-300 font-extrabold shadow-[0_0_10px_rgba(214,191,119,0.2)]">
-              خ
-            </div>
+            {texts.logoImage ? (
+              <img 
+                src={texts.logoImage} 
+                alt={texts.brandName} 
+                className="w-12 h-12 rounded-full border border-gold-400 bg-stone-900 object-cover shadow-[0_0_10px_rgba(214,191,119,0.2)]"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <div className="w-12 h-12 rounded-full border border-gold-400 bg-stone-900 flex items-center justify-center font-serif text-2xl text-gold-300 font-extrabold shadow-[0_0_10px_rgba(214,191,119,0.2)]">
+                {texts.logoLetter || 'خ'}
+              </div>
+            )}
             <div>
               <span className="font-serif text-xl sm:text-2xl font-bold tracking-tight text-gold-300 block">
-                {settings.pageTitle.split(' ')[0]}
+                {texts.brandName || 'خطاط'}
               </span>
               <span className="text-xs text-stone-400 block tracking-widest font-light -mt-1">
-                للفنون والخط العربي
+                {texts.brandSubtitle || 'للفنون والخط العربي'}
               </span>
             </div>
           </div>
@@ -52,7 +63,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               }`}
             >
               <Store size={16} />
-              <span>المتجر</span>
+              <span>{texts.tabShopText || 'المتجر'}</span>
             </button>
             <button
               onClick={() => setActiveTab('member')}
@@ -63,7 +74,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               }`}
             >
               <UserPlus size={16} />
-              <span>نادي العضوية</span>
+              <span>{texts.tabMembersText || 'نادي العضوية'}</span>
             </button>
             <button
               onClick={() => setActiveTab('admin')}
@@ -74,7 +85,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               }`}
             >
               <Shield size={16} />
-              <span>لوحة الإدارة</span>
+              <span>{texts.tabAdminText || 'لوحة الإدارة'}</span>
             </button>
           </div>
 
@@ -120,7 +131,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           }`}
         >
           <Store size={18} />
-          <span>المتجر</span>
+          <span>{texts.tabShopText || 'المتجر'}</span>
         </button>
         <button
           onClick={() => setActiveTab('member')}
@@ -129,7 +140,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           }`}
         >
           <UserPlus size={18} />
-          <span>نادي العضوية</span>
+          <span>{texts.tabMembersText || 'نادي العضوية'}</span>
         </button>
         <button
           onClick={() => setActiveTab('admin')}
@@ -138,7 +149,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           }`}
         >
           <Shield size={18} />
-          <span>لوحة الإدارة</span>
+          <span>{texts.tabAdminText || 'لوحة الإدارة'}</span>
         </button>
       </div>
     </nav>

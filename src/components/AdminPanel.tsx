@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { Lock, FileText, ShoppingBag, Plus, Sparkles, Check, Database, Send, Mail, AlertCircle, Copy, ExternalLink, Settings, Eye, Users } from 'lucide-react';
-import { Product, Order, PromoCode, Member, StoreSettings } from '../types';
+import { Product, Order, PromoCode, Member, StoreSettings, Student } from '../types';
 
 interface AdminPanelProps {
   orders: Order[];
   products: Product[];
   promoCodes: PromoCode[];
   members: Member[];
+  students?: Student[];
   settings: StoreSettings;
   isDemoMode: boolean;
   sheetsUrl: string;
@@ -21,6 +22,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   products,
   promoCodes,
   members,
+  students = [],
   settings,
   isDemoMode,
   sheetsUrl,
@@ -32,7 +34,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
   const [authError, setAuthError] = useState('');
-  const [adminTab, setAdminTab] = useState<'orders' | 'products' | 'promo' | 'members' | 'settings'>('orders');
+  const [adminTab, setAdminTab] = useState<'orders' | 'products' | 'promo' | 'members' | 'students' | 'settings'>('orders');
 
   // New product form states
   const [newProduct, setNewProduct] = useState({
@@ -50,9 +52,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   // New promo form states
   const [newPromo, setNewPromo] = useState({
     code: '',
-    discount: '10',
+    type: 'percentage' as 'percentage' | 'fixed' | 'shipping',
+    value: '15', // e.g. 15 for 15% or 50 for 50 SAR
+    minSpend: '0',
+    expiryDate: '',
+    usageLimit: '100',
+    categoryType: 'general' as 'general' | 'student' | 'member',
+    assignedIdentifier: '',
     eligibleProducts: 'all',
-    status: 'active' as 'active' | 'inactive'
+    status: 'active' as 'active' | 'inactive',
+    customerUsageLimit: '1'
   });
 
   // Success notifications for admin actions
@@ -111,16 +120,42 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     e.preventDefault();
     if (!newPromo.code) return;
 
+    const valNum = parseFloat(newPromo.value) || 0;
     const parsedPromo: PromoCode = {
       code: newPromo.code.toUpperCase().trim(),
-      discount: parseFloat(newPromo.discount) / 100,
+      type: newPromo.type,
+      value: newPromo.type === 'percentage' ? (valNum / 100) : valNum,
+      minSpend: parseFloat(newPromo.minSpend) || 0,
+      expiryDate: newPromo.expiryDate || undefined,
+      usageLimit: parseInt(newPromo.usageLimit) || undefined,
+      usageCount: 0,
+      categoryType: newPromo.categoryType,
+      assignedIdentifier: newPromo.assignedIdentifier || undefined,
+      usedByContacts: [],
       eligibleProducts: newPromo.eligibleProducts,
-      status: newPromo.status
+      status: newPromo.status,
+      discount: newPromo.type === 'percentage' ? (valNum / 100) : 0,
+      customerUsageLimit: parseInt(newPromo.customerUsageLimit) || undefined
     };
 
     onAddPromoCode(parsedPromo);
-    setAdminNotify('تمت إضافة كود الخصم بنجاح');
+    setAdminNotify('تمت إضافة كود الخصم المطور بنجاح وسيتم حفظه بجوجل شيت عند المزامنة!');
     setTimeout(() => setAdminNotify(null), 4000);
+    
+    // Clear form
+    setNewPromo({
+      code: '',
+      type: 'percentage',
+      value: '15',
+      minSpend: '0',
+      expiryDate: '',
+      usageLimit: '100',
+      categoryType: 'general',
+      assignedIdentifier: '',
+      eligibleProducts: 'all',
+      status: 'active',
+      customerUsageLimit: '1'
+    });
   };
 
   const triggerCopyAppsScript = () => {
@@ -166,7 +201,7 @@ function doPost(e) {
     } else if (action === 'register_member') {
       response = registerMember(postData);
     } else if (action === 'validate_promo') {
-      response = validatePromoCode(postData.code);
+      response = validatePromoCode(postData.code, postData.email, postData.phone, postData.subtotal, postData.studentId);
     } else {
       throw new Error('العملية المطلوبة غير مدعومة');
     }
@@ -316,59 +351,303 @@ function getImageData() {
   return data;
 }
 
-// التحقق من كود الخصم في شيت PromoCodes
-function validatePromoCode(code) {
+// التحقق من كود الخصم في شيت PromoCodes أو رقم الطالب مباشرة
+function validatePromoCode(code, email, phone, subtotal, studentId) {
   var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = spreadsheet.getSheetByName(\'PromoCodes\');
-  if (!sheet) return { valid: false, message: \'لا توجد ورقة خصومات\' };
-  var lastRow = sheet.getLastRow();
-  if (lastRow < 2) return { valid: false, message: \'لا توجد أكواد حالياً\' };
+  var sheet = spreadsheet.getSheetByName('PromoCodes');
   
-  var values = sheet.getRange(\'A2:D\' + lastRow).getValues();
-  for (var i = 0; i < values.length; i++) {
-    if (values[i][0].toString().trim().toUpperCase() === code.toUpperCase()) {
-      if (values[i][3].toString().trim().toLowerCase() !== \'active\') {
-        return { valid: false, message: \'الكود معطل حالياً\' };
+  // أولاً: التحقق مما إذا كان الكود المدخل هو رقم طالب مباشرة في شيت الطلاب
+  var studentSheet = spreadsheet.getSheetByName('Students');
+  if (studentSheet) {
+    var sLastRow = studentSheet.getLastRow();
+    if (sLastRow >= 2) {
+      var sValues = studentSheet.getRange('A2:G' + sLastRow).getValues();
+      for (var sIdx = 0; sIdx < sValues.length; sIdx++) {
+        var sId = sValues[sIdx][0] ? sValues[sIdx][0].toString().trim().toUpperCase() : '';
+        if (sId === code.toUpperCase().trim()) {
+          var sName = sValues[sIdx][1] ? sValues[sIdx][1].toString().trim() : '';
+          var sStatus = sValues[sIdx][6] ? sValues[sIdx][6].toString().trim().toLowerCase() : 'active';
+          
+          if (sStatus !== 'active' && sStatus !== 'نعم' && sStatus !== 'true' && sStatus !== 'نشط') {
+            return { valid: false, message: 'عذراً، هذا الرقم الطلابي غير نشط أو معطل ❌' };
+          }
+          
+          // البحث عن نسبة خصم مستعارة من أي كوبون طلاب نشط في جدول PromoCodes
+          var borrowType = 'percentage';
+          var borrowValue = 0.15; // خصم افتراضي 15%
+          var borrowEligible = 'all';
+          var studentUsageLimit = 1; // الافتراضي 1 إذا لم يحدد في الكوبون المستعار
+          
+          if (sheet) {
+            var pValues = sheet.getLastRow() >= 2 ? sheet.getRange('A2:L' + sheet.getLastRow()).getValues() : [];
+            for (var pIdx = 0; pIdx < pValues.length; pIdx++) {
+              var targetGroupRaw = pValues[pIdx][9] ? pValues[pIdx][9].toString().trim().toLowerCase() : 'general';
+              var pIsActive = pValues[pIdx][8] ? pValues[pIdx][8].toString().trim().toLowerCase() : 'active';
+              var pActive = pIsActive === 'active' || pIsActive === 'نعم' || pIsActive === 'true' || pIsActive === 'نشط';
+              var pIsStudent = targetGroupRaw === 'student' || targetGroupRaw === 'طالب' || targetGroupRaw === 'طلاب';
+              if (pIsStudent && pActive) {
+                borrowType = pValues[pIdx][1] ? pValues[pIdx][1].toString().trim().toLowerCase() : 'percentage';
+                borrowValue = parseFloat(pValues[pIdx][2]) || 0;
+                borrowEligible = pValues[pIdx][7] || 'all';
+                var pLimit = pValues[pIdx][11] !== '' && pValues[pIdx][11] !== undefined ? parseInt(pValues[pIdx][11]) : null;
+                if (pLimit !== null && !isNaN(pLimit)) {
+                  studentUsageLimit = pLimit;
+                }
+                break;
+              }
+            }
+          }
+          
+          var sUsedCount = parseInt(sValues[sIdx][5]) || 0;
+          if (sUsedCount >= studentUsageLimit) {
+            return { valid: false, message: 'عذراً، لقد استنفدت الحد الأقصى لاستخدام الرقم الطلابي للخصم (' + studentUsageLimit + ' استخدام) 🛡️' };
+          }
+          
+          return {
+            valid: true,
+            discount: borrowType === 'percentage' ? borrowValue : 0,
+            message: 'مرحباً بك يا ' + sName + '! تم تفعيل خصم الطلاب المباشر بنجاح 🎓',
+            eligibleProducts: borrowEligible,
+            type: borrowType,
+            value: borrowValue,
+            categoryType: 'student'
+          };
+        }
       }
-      var discount = parseFloat(values[i][1]) || 0.1;
+    }
+  }
+
+  if (!sheet) return { valid: false, message: 'لا توجد ورقة خصومات بالاسم المحدد' };
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return { valid: false, message: 'لا توجد أكواد ترويجية حالياً' };
+  
+  // الأعمدة المحدثة بالترتيب: 
+  // 0: code, 1: type, 2: value, 3: min_spend, 4: expiry_date, 5: usage_limit, 6: usage_count, 7: eligible_products, 8: is_active, 9: target_group, 10: used_contacts, 11: customer_usage_limit
+  var values = sheet.getRange('A2:L' + lastRow).getValues();
+  for (var i = 0; i < values.length; i++) {
+    var rowCode = values[i][0] ? values[i][0].toString().trim().toUpperCase() : '';
+    if (rowCode === code.toUpperCase().trim()) {
+      var statusVal = values[i][8] ? values[i][8].toString().trim().toLowerCase() : 'active';
+      var isActive = statusVal === 'active' || statusVal === 'true' || statusVal === 'نعم' || statusVal === 'نشط';
+      if (!isActive) {
+        return { valid: false, message: 'هذا الكوبون معطل حالياً' };
+      }
+      
+      var type = values[i][1] ? values[i][1].toString().trim().toLowerCase() : 'percentage';
+      var val = parseFloat(values[i][2]) || 0;
+      var minSpend = parseFloat(values[i][3]) || 0;
+      var expiryDate = values[i][4] ? values[i][4].toString().trim() : '';
+      var usageLimit = values[i][5] !== '' && values[i][5] !== undefined ? parseInt(values[i][5]) : null;
+      var usageCount = parseInt(values[i][6]) || 0;
+      var eligibleProducts = values[i][7] || 'all';
+      var targetGroupRaw = values[i][9] ? values[i][9].toString().trim().toLowerCase() : 'general';
+      var categoryType = (targetGroupRaw === 'student' || targetGroupRaw === 'طالب' || targetGroupRaw === 'طلاب') ? 'student' :
+                         (targetGroupRaw === 'member' || targetGroupRaw === 'عضو' || targetGroupRaw === 'أعضاء') ? 'member' : 'general';
+      var usedByStr = values[i][10] ? values[i][10].toString().trim().toLowerCase() : '';
+      var usedByContacts = usedByStr ? usedByStr.split(',').map(function(s) { return s.trim(); }).filter(Boolean) : [];
+      var customerUsageLimit = values[i][11] !== '' && values[i][11] !== undefined ? parseInt(values[i][11]) : null;
+      
+      // أ. التحقق من تاريخ انتهاء الصلاحية
+      if (expiryDate) {
+        var todayStr = Utilities.formatDate(new Date(), 'GMT+7', 'yyyy-MM-dd');
+        if (todayStr > expiryDate) {
+          return { valid: false, message: 'عذراً، هذا الكوبون منتهي الصلاحية 📅' };
+        }
+      }
+      
+      // ب. التحقق من عدد الاستخدام الكلي الأقصى
+      if (usageLimit !== null && !isNaN(usageLimit) && usageCount >= usageLimit) {
+        return { valid: false, message: 'عذراً، تم الوصول للحد الأقصى لاستخدام الكوبون 🛑' };
+      }
+      
+      // ج. التحقق من الحد الأدنى للسلة
+      if (subtotal !== undefined && subtotal !== null && subtotal < minSpend) {
+        return { valid: false, message: 'الحد الأدنى للشراء لتفعيل الكود هو ' + minSpend + ' ريال' };
+      }
+      
+      // د. التحقق من الاستخدام المتكرر لنفس العميل (إيميل أو هاتف)
+      if (customerUsageLimit !== null && !isNaN(customerUsageLimit) && customerUsageLimit > 0) {
+        var timesUsed = 0;
+        if (email || phone) {
+          var cleanContact = (email || phone || '').toString().trim().toLowerCase();
+          for (var k = 0; k < usedByContacts.length; k++) {
+            if (usedByContacts[k] === cleanContact) {
+              timesUsed++;
+            }
+          }
+        }
+        if (timesUsed >= customerUsageLimit) {
+          return { valid: false, message: 'لقد استنفدت الحد الأقصى لاستخدام هذا الكوبون المسموح للعميل الواحد (' + customerUsageLimit + ' مرات) 🛡️' };
+        }
+      } else {
+        // حماية تراجعية: إذا كان الكوبون خاص بالطلاب أو الأعضاء ولم يحدد حد استخدام، يقتصر على مرة واحدة افتراضياً للعميل
+        if (categoryType !== 'general' && (email || phone)) {
+          var cleanContact = (email || phone || '').toString().trim().toLowerCase();
+          if (usedByContacts.indexOf(cleanContact) !== -1) {
+            return { valid: false, message: 'لقد استخدمت هذا الكوبون من قبل، وهو متاح لمرة واحدة فقط للعميل 🛡️' };
+          }
+        }
+      }
+      
+      // هـ. التحقق من فئة الطلاب
+      if (categoryType === 'student') {
+        if (!studentId) {
+          return {
+            valid: true,
+            discount: type === 'percentage' ? val : 0,
+            message: 'كود طلابي مميز! سيتم التحقق من رقمك الطلابي عند إتمام الطلب 🎓',
+            eligibleProducts: eligibleProducts,
+            type: type,
+            value: val,
+            categoryType: 'student'
+          };
+        } else {
+          var studentSheet = spreadsheet.getSheetByName('Students');
+          if (!studentSheet) {
+            return { valid: false, message: 'لا توجد ورقة الطلاب للتحقق ❌' };
+          }
+          var sLastRow = studentSheet.getLastRow();
+          if (sLastRow < 2) {
+            return { valid: false, message: 'سجل الطلاب فارغ بالنظام ❌' };
+          }
+          var sValues = studentSheet.getRange('A2:G' + sLastRow).getValues();
+          var studentFound = false;
+          var studentActive = false;
+          for (var j = 0; j < sValues.length; j++) {
+            var sId = sValues[j][0] ? sValues[j][0].toString().trim() : '';
+            if (sId === studentId.trim()) {
+              studentFound = true;
+              var sStatus = sValues[j][6] ? sValues[j][6].toString().trim().toLowerCase() : 'active';
+              if (sStatus === 'active' || sStatus === 'نعم' || sStatus === 'true' || sStatus === 'نشط') {
+                studentActive = true;
+              }
+              break;
+            }
+          }
+          if (!studentFound) {
+            return { valid: false, message: 'الرقم الطلابي غير مسجل بالنظام ❌' };
+          }
+          if (!studentActive) {
+            return { valid: false, message: 'الرقم الطلابي غير نشط أو موقف ❌' };
+          }
+        }
+      }
+      
+      // و. التحقق من فئة الأعضاء
+      if (categoryType === 'member') {
+        if (email || phone) {
+          var memberSheet = spreadsheet.getSheetByName('Members');
+          if (!memberSheet) {
+            return { valid: false, message: 'ورقة المشتركين غير متوفرة ❌' };
+          }
+          var mLastRow = memberSheet.getLastRow();
+          var mValues = mLastRow >= 2 ? memberSheet.getRange('A2:C' + mLastRow).getValues() : [];
+          var memberFound = false;
+          for (var k = 0; k < mValues.length; k++) {
+            var mEmail = mValues[k][1] ? mValues[k][1].toString().trim().toLowerCase() : '';
+            var mPhone = mValues[k][2] ? mValues[k][2].toString().trim() : '';
+            if (mEmail === email.toString().trim().toLowerCase() || mPhone === phone.toString().trim()) {
+              memberFound = true;
+              break;
+            }
+          }
+          if (!memberFound) {
+            return { valid: false, message: 'عذراً، هذا الكوبون مخصص للأعضاء المشتركين فقط 💎' };
+          }
+        }
+      }
+      
       return {
         valid: true,
-        discount: discount,
-        eligibleProducts: values[i][2] || \'all\',
-        message: \'تم تفعيل الكود الترويجي بنجاح! ✅\'
+        discount: type === 'percentage' ? val : 0,
+        eligibleProducts: eligibleProducts,
+        message: 'تم تطبيق كود الخصم بنجاح! ✅',
+        type: type,
+        value: val,
+        categoryType: categoryType
       };
     }
   }
-  return { valid: false, message: \'الكوبون المكتوب غير صالح\' };
+  return { valid: false, message: 'الكوبون المكتوب غير صحيح أو منتهي' };
 }
 
 // جلب قائمة الأكواد الترويجية بالكامل لمدير المتجر
 function getPromoCodes() {
   var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = spreadsheet.getSheetByName(\'PromoCodes\');
+  var sheet = spreadsheet.getSheetByName('PromoCodes');
   if (!sheet) return [];
   var lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
-  return sheet.getRange(\'A2:D\' + lastRow).getValues().map(row => ({
+  
+  // الأعمدة المحدثة بالترتيب: 
+  // 0: code, 1: type, 2: value, 3: min_spend, 4: expiry_date, 5: usage_limit, 6: usage_count, 7: eligible_products, 8: is_active, 9: target_group, 10: used_contacts, 11: customer_usage_limit
+  return sheet.getRange('A2:L' + lastRow).getValues().map(row => ({
     code: row[0].toString().trim(),
-    discount: parseFloat(row[1]) || 0.1,
-    eligibleProducts: row[2] || \'all\',
-    status: row[3] || \'active\'
+    type: row[1] ? row[1].toString().trim().toLowerCase() : 'percentage',
+    value: parseFloat(row[2]) || 0,
+    minSpend: parseFloat(row[3]) || 0,
+    expiryDate: row[4] ? row[4].toString().trim() : '',
+    usageLimit: row[5] !== '' && row[5] !== undefined ? parseInt(row[5]) : null,
+    usageCount: parseInt(row[6]) || 0,
+    eligibleProducts: row[7] || 'all',
+    status: row[8] || 'active',
+    categoryType: row[9] ? row[9].toString().trim().toLowerCase() : 'general',
+    usedByContacts: row[10] ? row[10].toString().split(',').map(function(s) { return s.trim(); }).filter(Boolean) : [],
+    customerUsageLimit: row[11] !== '' && row[11] !== undefined ? parseInt(row[11]) : null
   }));
 }
 
 // تجميع كافة البيانات للشيت لغرض المزامنة الكاملة
 function getData() {
   var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  
+  // التحقق من وجود ورقة "نصوص" وإنشائها تلقائياً إذا لم تكن موجودة
+  var textsSheet = spreadsheet.getSheetByName(\'نصوص\') || spreadsheet.getSheetByName(\'Texts\');
+  if (!textsSheet) {
+    textsSheet = spreadsheet.insertSheet(\'نصوص\');
+    textsSheet.getRange(\'A1:C1\').setValues([[\'المعرف\', \'القيمة\', \'مكان النص أو الوصف\']]);
+    textsSheet.getRange(\'A2:C28\').setValues([
+      [\'logo_image\', \'\', \'رابط صورة شعار المتجر (اتركه فارغاً لاستخدام الحرف البديل)\'],
+      [\'logo_letter\', \'خ\', \'الحرف البديل للشعار الدائري (مثل: خ, م, أ)\'],
+      [\'brand_name\', \'خطاط\', \'اسم المتجر الرئيسي في الهيدر (مثل: خطاط)\'],
+      [\'brand_subtitle\', \'للفنون والخط العربي\', \'الوصف الفرعي للمتجر في الهيدر (مثل: للفنون والخط العربي)\'],
+      [\'hero_title\', \'موقع النخبة للخط العربي والزخرفة الإسلامية\', \'العنوان الترحيبي الكبير العريض في أعلى الصفحة الرئيسية\'],
+      [\'hero_badge_text\', \'تحف فنية أصلية للخط العربي والزخرفة الإسلامية\', \'نص الشارة العلوية المضيئة في أعلى الهيدر\'],
+      [\'hero_subtitle\', \'اقتنِ أجمل اللوحات والتحف الجدارية والمخطوطات الخاصة المصنوعة بأيدي أمهر الخطاطين المحترفين على مر الزمن لتزيين جدران بيتك بذكر الله.\', \'الوصف التوضيحي تحت العنوان الترحيبي الرئيسي\'],
+      [\'search_placeholder\', \'ابحث عن لوحة آية الكرسي، أسماء الله الحسنى، أدوات...\', \'نص التلميح داخل صندوق البحث عن المنتجات\'],
+      [\'category_all_text\', \'كل الأقسام والمعروضات\', \'النص الافتراضي لاختيار الأقسام\'],
+      [\'tab_shop_text\', \'المتجر\', \'اسم زر تبويب المتجر في القائمة العلوية\'],
+      [\'tab_members_text\', \'نادي العضوية\', \'اسم زر تبويب نادي العضوية في القائمة العلوية\'],
+      [\'tab_admin_text\', \'لوحة الإدارة\', \'اسم زر تبويب لوحة الإدارة في القائمة العلوية\'],
+      [\'discount_label_text\', \'خصم\', \'نص كلمة (خصم) المكتوبة بجانب نسبة التخفيض في كرت المنتج\'],
+      [\'offers_title\', \'عروض وتخفيضات خاصة وحصرية\', \'عنوان قسم العروض والتخفيضات\'],
+      [\'offers_subtitle\', \'فرصتك لاقتناء تحف فنية نادرة ومميزة بأسعار خاصة لفترة محدودة\', \'الوصف الفرعي تحت عنوان قسم العروض\'],
+      [\'active_now_text\', \'نشط الآن\', \'شارة العرض النشط الآن\'],
+      [\'category_pill_all_text\', \'الكل\', \'اسم زر التصفية الكل للأقسام\'],
+      [\'footer_intro_text\', \'متجر متخصص بإنتاج وبيع اللوحات الجدارية الفاخرة للخط العربي والزخرفة الإسلامية، مكتوبة ومحفورة ومذهبة بأيدي خطاطين محترفين لتناسب الأذواق الرفيعة والمحترمة.\', \'النص التعريفي للمتجر في أسفل الصفحة فوتر\'],
+      [\'footer_quick_links_title\', \'أقسام ومفاتيح سريعة\', \'عنوان قائمة الروابط السريعة في الفوتر\'],
+      [\'footer_link_browse\', \'تصفح المعرض\', \'رابط تصفح المعرض في الفوتر\'],
+      [\'footer_link_subscribe\', \'اشترك بالعضوية\', \'رابط الاشتراك بالعضوية في الفوتر\'],
+      [\'footer_link_admin\', \'بوابة الإدارة\', \'رابط بوابة الإدارة في الفوتر\'],
+      [\'footer_link_offers\', \'عروض وتخفيضات\', \'رابط عروض وتخفيضات في الفوتر\'],
+      [\'footer_contact_title\', \'تواصل فوري ومتابعة\', \'عنوان قسم التواصل في الفوتر\'],
+      [\'footer_contact_desc\', \'يسر خدمة العملاء والطلبات الخاصة استقبال تساؤلاتكم واستفساراتكم حول اللوحات المخصصة بالاسم طوال اليوم.\', \'وصف قسم التواصل في الفوتر\'],
+      [\'footer_terms_of_use\', \'شروط الاستخدام\', \'رابط شروط الاستخدام في أسفل الصفحة\'],
+      [\'footer_privacy_policy\', \'سياسة الخصوصية وتأمين البيانات\', \'رابط سياسة الخصوصية في أسفل الصفحة\']
+    ]);
+  }
+  
   return {
     profile: spreadsheet.getSheetByName(\'Profile\') ? spreadsheet.getSheetByName(\'Profile\').getDataRange().getValues().slice(1) : [],
     contact: spreadsheet.getSheetByName(\'Contact\') ? spreadsheet.getSheetByName(\'Contact\').getDataRange().getValues().slice(1) : [],
     images: spreadsheet.getSheetByName(\'Images\') ? spreadsheet.getSheetByName(\'Images\').getDataRange().getValues().slice(1) : [],
     settings: spreadsheet.getSheetByName(\'Settings\') ? spreadsheet.getSheetByName(\'Settings\').getDataRange().getValues().slice(1) : [],
-    promoCodes: spreadsheet.getSheetByName(\'PromoCodes\') ? spreadsheet.getSheetByName(\'PromoCodes\').getDataRange().getValues().slice(1) : [],
-    email: spreadsheet.getSheetByName(\'Email\') ? spreadsheet.getSheetByName(\'Email\').getDataRange().getValues().slice(1) : [],
-    orders: spreadsheet.getSheetByName(\'Orders\') ? spreadsheet.getSheetByName(\'Orders\').getDataRange().getValues().slice(1) : [],
-    members: spreadsheet.getSheetByName(\'Members\') ? spreadsheet.getSheetByName(\'Members\').getDataRange().getValues().slice(1) : []
+    promoCodes: spreadsheet.getSheetByName('PromoCodes') ? spreadsheet.getSheetByName('PromoCodes').getDataRange().getValues().slice(1) : [],
+    orders: spreadsheet.getSheetByName('Orders') ? spreadsheet.getSheetByName('Orders').getDataRange().getValues().slice(1) : [],
+    members: spreadsheet.getSheetByName('Members') ? spreadsheet.getSheetByName('Members').getDataRange().getValues().slice(1) : [],
+    students: spreadsheet.getSheetByName('Students') ? spreadsheet.getSheetByName('Students').getDataRange().getValues().slice(1) : [],
+    email: spreadsheet.getSheetByName('Email') ? spreadsheet.getSheetByName('Email').getDataRange().getValues().slice(1) : [],
+    texts: textsSheet.getDataRange().getValues().slice(1)
   };
 }
 
@@ -396,16 +675,96 @@ function submitOrder(order) {
     totalAmount += (itemPrice * items[i].quantity);
   }
   
-  var promoCode = order.promoCode || \'\';
+  var productsStr = productsList.join(', ');
+  var quantitiesStr = quantitiesList.join(', ');
+  
+  var promoCode = order.promoCode || '';
   if (promoCode) {
-    var promo = validatePromoCode(promoCode);
+    var promo = validatePromoCode(promoCode, order.email, order.phone, totalAmount, order.studentId);
+    if (promo && !promo.valid) {
+      return { status: 'error', message: promo.message || 'كود الخصم غير صالح للتطبيق أو استنفد الحد الأقصى للاستخدام' };
+    }
     if (promo && promo.valid) {
-      totalAmount = totalAmount * (1 - promo.discount);
+      if (promo.type === 'percentage') {
+        totalAmount = totalAmount * (1 - promo.value);
+      } else if (promo.type === 'fixed') {
+        totalAmount = Math.max(0, totalAmount - promo.value);
+      } else if (promo.type === 'shipping') {
+        totalAmount = totalAmount; // شحن مجاني
+      }
+      
+      // زيادة عدد استخدامات الكوبون وتحديث سجل العملاء في الشيت
+      try {
+        var promoSheet = spreadsheet.getSheetByName('PromoCodes');
+        if (promoSheet) {
+          var pRows = promoSheet.getLastRow();
+          var pCodes = pRows >= 2 ? promoSheet.getRange('A2:A' + pRows).getValues() : [];
+          for (var pIdx = 0; pIdx < pCodes.length; pIdx++) {
+            if (pCodes[pIdx][0].toString().trim().toUpperCase() === promoCode.toUpperCase().trim()) {
+              var rNum = pIdx + 2;
+              
+              // زيادة العداد الكلي للخصومات (العمود G أي العمود رقم 7)
+              var currentCountVal = parseInt(promoSheet.getRange(rNum, 7).getValue()) || 0;
+              promoSheet.getRange(rNum, 7).setValue(currentCountVal + 1);
+              
+              // إضافة بيانات اتصال العميل (العمود K أي العمود رقم 11) - نضعه في K مفصولاً لكي لا يلخبط مع العمود J فئة الاستهداف
+              var cleanContact = (order.email || order.phone || '').toString().trim().toLowerCase();
+              if (cleanContact) {
+                var currentContactsStr = promoSheet.getRange(rNum, 11).getValue().toString().trim();
+                var currentContactsList = currentContactsStr ? currentContactsStr.split(',').map(function(s) { return s.trim().toLowerCase(); }).filter(Boolean) : [];
+                currentContactsList.push(cleanContact);
+                promoSheet.getRange(rNum, 11).setValue(currentContactsList.join(', '));
+              }
+              break;
+            }
+          }
+        }
+      } catch (incrementErr) {
+        Logger.log('فشل تحديث استخدامات الكوبون في الشيت: ' + incrementErr.message);
+      }
+      
+      // زيادة عدد استخدامات الطالب في ورقة الطلاب إن وُجد رقم طالب
+      try {
+        var actualStudentId = order.studentId || '';
+        if (!actualStudentId && promoCode) {
+          var studentSheet = spreadsheet.getSheetByName('Students');
+          if (studentSheet) {
+            var sLastRow = studentSheet.getLastRow();
+            if (sLastRow >= 2) {
+              var sIds = studentSheet.getRange('A2:A' + sLastRow).getValues();
+              for (var sIdx = 0; sIdx < sIds.length; sIdx++) {
+                if (sIds[sIdx][0].toString().trim().toUpperCase() === promoCode.toUpperCase().trim()) {
+                  actualStudentId = promoCode;
+                  break;
+                }
+              }
+            }
+          }
+        }
+        
+        if (actualStudentId) {
+          var studentSheet = spreadsheet.getSheetByName('Students');
+          if (studentSheet) {
+            var sLastRow = studentSheet.getLastRow();
+            if (sLastRow >= 2) {
+              var sValues = studentSheet.getRange('A2:A' + sLastRow).getValues();
+              for (var sIdx = 0; sIdx < sValues.length; sIdx++) {
+                if (sValues[sIdx][0].toString().trim().toUpperCase() === actualStudentId.toString().trim().toUpperCase()) {
+                  var sRow = sIdx + 2;
+                  // زيادة العداد في العمود F (العمود رقم 6)
+                  var currentUsedCount = parseInt(studentSheet.getRange(sRow, 6).getValue()) || 0;
+                  studentSheet.getRange(sRow, 6).setValue(currentUsedCount + 1);
+                  break;
+                }
+              }
+            }
+          }
+        }
+      } catch (studentIncrementErr) {
+        Logger.log('فشل تحديث عدد استخدامات الطالب في الشيت: ' + studentIncrementErr.message);
+      }
     }
   }
-  
-  var productsStr = productsList.join(\', \');
-  var quantitiesStr = quantitiesList.join(\', \');
   
   var settings = getSettings();
   var botToken = settings.botToken || \'\';
@@ -447,31 +806,8 @@ function submitOrder(order) {
     }
   }
 
-  // 2. توليد ملف الفاتورة PDF وحفظه في مجلد Google Drive
-  var pdfLink = \'#\';
-  var pdfFile = null;
-  
-  try {
-    var pdfResult = generateAndSavePDF(orderId, order);
-    if (pdfResult && pdfResult.status === \'success\') {
-      pdfLink = pdfResult.pdfUrl;
-      pdfFile = pdfResult.file;
-    } else if (pdfResult && pdfResult.status === \'error\') {
-      pdfLink = \'فشل: \' + pdfResult.message;
-    }
-  } catch (e) {
-    pdfLink = \'خطأ: \' + e.message;
-    Logger.log(\'خطأ في توليد الـ PDF: \' + e.message);
-  }
-  
-  // 3. إرسال البريد الإلكتروني لتأكيد الطلب للعميل وصاحب المتجر مع ملف PDF المرفق
-  try {
-    sendEmailConfirmation(orderId, order, pdfFile);
-  } catch (emailErr) {
-    Logger.log(\'فشل إرسال إيميل التأكيد: \' + emailErr.message);
-  }
-  
-  // 4. تسجيل وتوثيق الطلب بالكامل في شيت Orders
+  // 2. تسجيل وتوثيق الطلب بالكامل في شيت Orders أولاً قبل توليد الـ PDF
+  // هذا يضمن أن السكربتات الخارجية المرتبطة بالقالب يمكنها العثور على رقم الطلب في ورقة Orders عند فتح المستند وتوليد الفاتورة
   orderSheet.appendRow([
     orderId,
     timestamp,
@@ -484,14 +820,47 @@ function submitOrder(order) {
     totalAmount,
     promoCode,
     telegramSentStatus,
-    pdfLink
+    \'جاري توليد الفاتورة...\'
   ]);
+  
+  var lastRow = orderSheet.getLastRow();
+  
+  // 3. توليد ملف الفاتورة PDF وحفظه في مجلد Google Drive
+  var pdfLink = \'#\';
+  var pdfFile = null;
+  
+  try {
+    var pdfResult = generateAndSavePDF(orderId, order, totalAmount);
+    if (pdfResult && pdfResult.status === \'success\') {
+      pdfLink = pdfResult.pdfUrl;
+      pdfFile = pdfResult.file;
+    } else if (pdfResult && pdfResult.status === \'error\') {
+      pdfLink = \'فشل: \' + pdfResult.message;
+    }
+  } catch (e) {
+    pdfLink = \'خطأ: \' + e.message;
+    Logger.log(\'خطأ في توليد الـ PDF: \' + e.message);
+  }
+  
+  // تحديث رابط الـ PDF في ورقة Orders (العمود رقم 12 هو العمود L)
+  try {
+    orderSheet.getRange(lastRow, 12).setValue(pdfLink);
+  } catch (setValErr) {
+    Logger.log(\'فشل تحديث رابط الـ PDF في الشيت: \' + setValErr.message);
+  }
+  
+  // 4. إرسال البريد الإلكتروني لتأكيد الطلب للعميل وصاحب المتجر مع ملف PDF المرفق
+  try {
+    sendEmailConfirmation(orderId, order, pdfFile, totalAmount);
+  } catch (emailErr) {
+    Logger.log(\'فشل إرسال إيميل التأكيد: \' + emailErr.message);
+  }
   
   return { status: \'success\', orderId: orderId, telegramSent: telegramSentStatus, pdfLink: pdfLink };
 }
 
 // توليد الفاتورة الاحترافية بالاعتماد على قالب مستند جوجل المخصص
-function generateAndSavePDF(orderId, order) {
+function generateAndSavePDF(orderId, order, finalTotalAmount) {
   try {
     var settings = getSettings();
     if (!settings.templateId || !settings.folderUrl) {
@@ -519,14 +888,25 @@ function generateAndSavePDF(orderId, order) {
     body.replaceText(\'{{email}}\', order.email || \'\');
     
     var items = order.items || [];
-    var total = items.reduce(function(sum, item) {
+    var originalTotal = items.reduce(function(sum, item) {
       return sum + ((item.finalPrice || item.discountedPrice || item.price || 0) * (item.quantity || 1));
     }, 0);
-    body.replaceText(\'{{totalAmount}}\', total.toFixed(2));
+    
+    var totalVal = (finalTotalAmount !== undefined && finalTotalAmount !== null) ? finalTotalAmount : originalTotal;
+    body.replaceText(\'{{totalAmount}}\', Number(totalVal).toFixed(2));
     
     var tableText = items.map(function(item) {
       return (item.title || \'غير معروف\') + \' (x\' + (item.quantity || 1) + \') - \' + ((item.finalPrice || item.discountedPrice || item.price || 0) * (item.quantity || 1)).toFixed(2) + \' ฿\';
     }).join(\'\\n\');
+    
+    var discountVal = originalTotal - totalVal;
+    if (discountVal > 0.01) {
+      tableText += \'\\n----------------------------------\\n\' +
+                   \'المجموع الفرعي: \' + originalTotal.toFixed(2) + \' ฿\\n\' +
+                   \'خصم الكوبون (\' + (order.promoCode || \'\') + \'): -\' + discountVal.toFixed(2) + \' ฿\\n\' +
+                   \'المبلغ النهائي: \' + totalVal.toFixed(2) + \' ฿\';
+    }
+    
     body.replaceText(\'{{items}}\', tableText);
     
     doc.saveAndClose();
@@ -574,17 +954,20 @@ function extractIdFromUrl(urlOrId) {
 }
 
 // إعداد وصياغة محتوى البريد الإلكتروني للعميل والمدير بأعلى احترافية وأمان
-function sendEmailConfirmation(orderId, order, pdfFile) {
+function sendEmailConfirmation(orderId, order, pdfFile, finalTotalAmount) {
   try {
     var settings = getSettings();
     var timestamp = Utilities.formatDate(new Date(), \'GMT+7\', \'yyyy-MM-dd HH:mm:ss\');
     var promoCode = order.promoCode || \'\';
     
-    var totalAmount = order.items.reduce(function(sum, item) {
+    var originalTotal = order.items.reduce(function(sum, item) {
       var price = Number(item.finalPrice || item.discountedPrice || item.price || 0);
       var qty = Number(item.quantity || 1);
       return sum + (price * qty);
     }, 0);
+
+    var totalVal = (finalTotalAmount !== undefined && finalTotalAmount !== null) ? finalTotalAmount : originalTotal;
+    var discountAmount = originalTotal - totalVal;
 
     // تجهيز جدول المنتجات لعرضه في الإيميل بشكل أنيق ومنسق جداً
     var productsHtmlTable = 
@@ -608,10 +991,22 @@ function sendEmailConfirmation(orderId, order, pdfFile) {
         \'</tr>\';
     });
     
+    if (discountAmount > 0.01) {
+      productsHtmlTable += 
+        \'<tr style="font-weight: bold; background-color: #fcfbfa;">\' +
+          \'<td colspan="3" style="padding: 10px; text-align: right;">المجموع الفرعي</td>\' +
+          \'<td style="padding: 10px; text-align: center;">\' + originalTotal.toFixed(0) + \' ฿</td>\' +
+        \'</tr>\' +
+        \'<tr style="font-weight: bold; background-color: #fee2e2; color: #b91c1c;">\' +
+          \'<td colspan="3" style="padding: 10px; text-align: right;">خصم الكوبون (\' + promoCode + \')</td>\' +
+          \'<td style="padding: 10px; text-align: center;">-\' + discountAmount.toFixed(0) + \' ฿</td>\' +
+        \'</tr>\';
+    }
+
     productsHtmlTable += 
       \'<tr style="font-weight: bold; background-color: #fcfbfa;">\' +
         \'<td colspan="3" style="padding: 10px; text-align: right;">المبلغ الإجمالي كلياً</td>\' +
-        \'<td style="padding: 10px; text-align: center; color: #c5a850;">\' + totalAmount.toFixed(0) + \' ฿</td>\' +
+        \'<td style="padding: 10px; text-align: center; color: #c5a850;">\' + totalVal.toFixed(0) + \' ฿</td>\' +
       \'</tr>\' +
     \'</table>\';
 
@@ -957,6 +1352,14 @@ function getCustomerEmailContent() {
             قائمة المشتركين
           </button>
           <button
+            onClick={() => setAdminTab('students')}
+            className={`px-4 py-2 rounded-xl font-bold transition-all ${
+              adminTab === 'students' ? 'bg-gold-500 text-stone-950' : 'bg-stone-850 hover:bg-stone-800 text-stone-300'
+            }`}
+          >
+            سجل الطلاب ({students.length})
+          </button>
+          <button
             onClick={() => setAdminTab('settings')}
             className={`px-4 py-2 rounded-xl font-bold transition-all ${
               adminTab === 'settings' ? 'bg-gold-500 text-stone-950' : 'bg-stone-850 hover:bg-stone-800 text-stone-300'
@@ -1233,17 +1636,102 @@ function getCustomerEmailContent() {
               </div>
 
               <div>
-                <label className="block text-stone-700 text-xs font-bold mb-1.5">نسبة الخصم المئوية (%):</label>
+                <label className="block text-stone-700 text-xs font-bold mb-1.5">نوع الكوبون / العرض:</label>
+                <select
+                  value={newPromo.type}
+                  onChange={(e) => {
+                    const selected = e.target.value as any;
+                    setNewPromo({ 
+                      ...newPromo, 
+                      type: selected,
+                      value: selected === 'shipping' ? '0' : selected === 'percentage' ? '15' : '50'
+                    });
+                  }}
+                  className="w-full px-4 py-2 border border-stone-200 rounded-xl outline-none focus:border-gold-500 bg-stone-50 text-xs"
+                >
+                  <option value="percentage">نسبة مئوية (%)</option>
+                  <option value="fixed">مبلغ خصم ثابت (฿)</option>
+                  <option value="shipping">شحن مجاني كامل</option>
+                </select>
+              </div>
+
+              {newPromo.type !== 'shipping' && (
+                <div>
+                  <label className="block text-stone-700 text-xs font-bold mb-1.5">
+                    {newPromo.type === 'percentage' ? 'نسبة الخصم المئوية (%):' : 'قيمة الخصم الثابتة (฿):'}
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    value={newPromo.value}
+                    onChange={(e) => setNewPromo({ ...newPromo, value: e.target.value })}
+                    placeholder={newPromo.type === 'percentage' ? "مثال: 15" : "مثال: 50"}
+                    className="w-full px-4 py-2 border border-stone-200 rounded-xl outline-none focus:border-gold-500 bg-stone-50 text-xs font-semibold"
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="block text-stone-700 text-xs font-bold mb-1.5">الحد الأدنى للشراء لتفعيل الخصم (฿):</label>
+                <input
+                  type="number"
+                  min="0"
+                  required
+                  value={newPromo.minSpend}
+                  onChange={(e) => setNewPromo({ ...newPromo, minSpend: e.target.value })}
+                  placeholder="مثال: 300 (أو 0 لعدم وجود حد أدنى)"
+                  className="w-full px-4 py-2 border border-stone-200 rounded-xl outline-none focus:border-gold-500 bg-stone-50 text-xs font-semibold"
+                />
+              </div>
+
+              <div>
+                <label className="block text-stone-700 text-xs font-bold mb-1.5">تاريخ انتهاء الكود (اختياري):</label>
+                <input
+                  type="date"
+                  value={newPromo.expiryDate}
+                  onChange={(e) => setNewPromo({ ...newPromo, expiryDate: e.target.value })}
+                  className="w-full px-4 py-2 border border-stone-200 rounded-xl outline-none focus:border-gold-500 bg-stone-50 text-xs font-semibold"
+                />
+              </div>
+
+              <div>
+                <label className="block text-stone-700 text-xs font-bold mb-1.5">الحد الكلي لمرات استخدام الكوبون:</label>
                 <input
                   type="number"
                   min="1"
-                  max="100"
                   required
-                  value={newPromo.discount}
-                  onChange={(e) => setNewPromo({ ...newPromo, discount: e.target.value })}
-                  placeholder="مثال: 15"
+                  value={newPromo.usageLimit}
+                  onChange={(e) => setNewPromo({ ...newPromo, usageLimit: e.target.value })}
+                  placeholder="مثال: 100"
                   className="w-full px-4 py-2 border border-stone-200 rounded-xl outline-none focus:border-gold-500 bg-stone-50 text-xs font-semibold"
                 />
+              </div>
+
+              <div>
+                <label className="block text-stone-700 text-xs font-bold mb-1.5">الحد الأقصى لاستخدام العميل الواحد (مثال: 1 للخصم لمرة واحدة):</label>
+                <input
+                  type="number"
+                  min="1"
+                  required
+                  value={newPromo.customerUsageLimit}
+                  onChange={(e) => setNewPromo({ ...newPromo, customerUsageLimit: e.target.value })}
+                  placeholder="مثال: 1"
+                  className="w-full px-4 py-2 border border-stone-200 rounded-xl outline-none focus:border-gold-500 bg-stone-50 text-xs font-semibold"
+                />
+              </div>
+
+              <div>
+                <label className="block text-stone-700 text-xs font-bold mb-1.5">الفئة المستهدفة بالكوبون:</label>
+                <select
+                  value={newPromo.categoryType}
+                  onChange={(e) => setNewPromo({ ...newPromo, categoryType: e.target.value as any })}
+                  className="w-full px-4 py-2 border border-stone-200 rounded-xl outline-none focus:border-gold-500 bg-stone-50 text-xs"
+                >
+                  <option value="general">عام (لجميع العملاء)</option>
+                  <option value="student">للطلاب فقط (يتطلب رقم طالب معتمد) 🎓</option>
+                  <option value="member">للأعضاء المشتركين فقط (العضويات المسجلة) 💎</option>
+                </select>
               </div>
 
               <div>
@@ -1304,26 +1792,55 @@ function getCustomerEmailContent() {
                 <thead>
                   <tr className="bg-stone-100 text-stone-700 font-bold border-b border-stone-200">
                     <th className="p-4">الكود المالي</th>
-                    <th className="p-4">قيمة الخصم</th>
-                    <th className="p-4">المنتجات المشمولة</th>
+                    <th className="p-4">نوع وقيمة الخصم</th>
+                    <th className="p-4">الحد الأدنى للشراء</th>
+                    <th className="p-4">الفئة المستهدفة</th>
+                    <th className="p-4">الاستخدام الحالي / الأقصى</th>
+                    <th className="p-4">تاريخ الانتهاء</th>
                     <th className="p-4">الحالة</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-150">
-                  {promoCodes.map((promo, idx) => (
-                    <tr key={idx} className="hover:bg-stone-50/50">
-                      <td className="p-4 font-mono font-bold text-stone-900 tracking-wider">{promo.code}</td>
-                      <td className="p-4 font-semibold text-emerald-600">خصم {Math.round(promo.discount * 100)}%</td>
-                      <td className="p-4 text-stone-500 max-w-xs truncate">{promo.eligibleProducts === 'all' || promo.eligibleProducts === 'ALL' ? 'كل اللوحات في المتجر' : promo.eligibleProducts}</td>
-                      <td className="p-4">
-                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                          promo.status === 'active' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-red-50 text-red-700 border border-red-100'
-                        }`}>
-                          {promo.status === 'active' ? 'نشط ومفعل' : 'موقوف'}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
+                  {promoCodes.map((promo, idx) => {
+                    const discountVal = promo.value !== undefined ? promo.value : promo.discount;
+                    return (
+                      <tr key={idx} className="hover:bg-stone-50/50">
+                        <td className="p-4 font-mono font-bold text-stone-900 tracking-wider">{promo.code}</td>
+                        <td className="p-4 font-semibold text-emerald-600">
+                          {promo.type === 'fixed' ? (
+                            <span>خصم ثابت {discountVal} ฿</span>
+                          ) : promo.type === 'shipping' ? (
+                            <span>شحن مجاني 🚚</span>
+                          ) : (
+                            <span>خصم {Math.round(discountVal * 100)}%</span>
+                          )}
+                        </td>
+                        <td className="p-4 font-bold text-stone-700">{promo.minSpend || 0} ฿</td>
+                        <td className="p-4 text-stone-700 font-medium">
+                          {promo.categoryType === 'student' ? (
+                            <span className="text-amber-700 bg-amber-50 px-2 py-1 rounded-md border border-amber-100">🎓 طلابي</span>
+                          ) : promo.categoryType === 'member' ? (
+                            <span className="text-gold-700 bg-amber-50 px-2 py-1 rounded-md border border-gold-100">💎 أعضاء</span>
+                          ) : (
+                            <span className="text-stone-500">🌍 عام للكل</span>
+                          )}
+                        </td>
+                        <td className="p-4 font-mono text-stone-600">
+                          {promo.usageCount || 0} / {promo.usageLimit !== undefined ? promo.usageLimit : '∞'}
+                        </td>
+                        <td className="p-4 font-mono text-stone-500">
+                          {promo.expiryDate ? promo.expiryDate : 'لا ينتهي'}
+                        </td>
+                        <td className="p-4">
+                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                            promo.status === 'active' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-red-50 text-red-700 border border-red-100'
+                          }`}>
+                            {promo.status === 'active' ? 'نشط ومفعل' : 'موقوف'}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -1364,6 +1881,58 @@ function getCustomerEmailContent() {
                       <td className="p-4">
                         <span className="bg-amber-50 text-gold-700 border border-gold-200 px-3 py-1 rounded-lg font-mono font-bold">
                           {member.discountCode || 'WELCOME10'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* TAB CONTENT: Students */}
+      {adminTab === 'students' && (
+        <div className="bg-white rounded-3xl shadow-md border border-stone-150 overflow-hidden">
+          <div className="p-6 border-b border-stone-100 flex justify-between items-center bg-stone-50">
+            <div>
+              <span className="font-serif text-lg font-bold text-stone-900 block">سجل الطلاب والدارسين المعتمدين ({students.length} طالب)</span>
+              <span className="text-[10px] text-stone-500 mt-1 block">الطلاب المسجلون بقاعدة بيانات جوجل شيت المؤهلين للحصول على كود الطلاب الأكاديمي</span>
+            </div>
+            <span className="text-xs bg-amber-50 text-amber-700 border border-amber-200 px-3 py-1 rounded-xl font-bold flex items-center gap-1">
+              🎓 طلاب مسجلون
+            </span>
+          </div>
+
+          <div className="overflow-x-auto">
+            {students.length === 0 ? (
+              <div className="p-12 text-center text-stone-400">لا يوجد أي طلاب مسجلين في ورقة Students بقوقل شيت حتى الآن.</div>
+            ) : (
+              <table className="w-full text-right border-collapse text-xs">
+                <thead>
+                  <tr className="bg-stone-100 text-stone-700 font-bold border-b border-stone-200">
+                    <th className="p-4">الرقم الطلابي الأكاديمي</th>
+                    <th className="p-4">اسم الطالب كاملاً</th>
+                    <th className="p-4">الكلية / المدرسة</th>
+                    <th className="p-4">الحد الأقصى للمشتريات</th>
+                    <th className="p-4">حالة الحساب</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-stone-150">
+                  {students.map((student, idx) => (
+                    <tr key={idx} className="hover:bg-stone-50/50">
+                      <td className="p-4 font-mono font-bold text-gold-600 tracking-wider">{student.studentId}</td>
+                      <td className="p-4 font-bold text-stone-900">{student.name}</td>
+                      <td className="p-4 text-stone-500">{student.department || 'عام'}</td>
+                      <td className="p-4 font-mono font-semibold text-stone-700">
+                        {student.maxUsages !== undefined ? `${student.maxUsages} مرات` : 'غير محدود'}
+                      </td>
+                      <td className="p-4">
+                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                          student.status === 'active' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-red-50 text-red-700 border border-red-100'
+                        }`}>
+                          {student.status === 'active' ? 'أكاديمي نشط' : 'موقف مؤقتاً'}
                         </span>
                       </td>
                     </tr>
