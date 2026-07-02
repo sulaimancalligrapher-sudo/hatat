@@ -241,20 +241,120 @@ export const getProxyUrl = (urlOrId: string): string => {
   if (trimmed.startsWith('data:') || trimmed.startsWith('blob:')) {
     return trimmed;
   }
-  // If it's a pure Google Drive File ID (alphanumeric, 25-50 characters, no slashes or dots)
+
+  // Extract file ID if it is a Google Drive URL or pure ID
+  let fileId = '';
   if (/^[a-zA-Z0-9-_]{25,50}$/.test(trimmed)) {
-    return `/api/drive-proxy?id=${trimmed}`;
+    fileId = trimmed;
+  } else if (trimmed.includes('drive.google.com') || trimmed.includes('docs.google.com')) {
+    const match = trimmed.match(/(?:id=|\/d\/|folders\/)([a-zA-Z0-9-_]{25,})[/\?]?/);
+    if (match && match[1]) {
+      fileId = match[1];
+    }
   }
-  // If it is a Google Drive URL
-  if (trimmed.includes('drive.google.com') || trimmed.includes('docs.google.com')) {
+
+  // If it's not a Google Drive link, return it directly
+  if (!fileId && !trimmed.includes('drive.google.com') && !trimmed.includes('docs.google.com')) {
+    return trimmed;
+  }
+
+  const directDriveUrl = `https://docs.google.com/uc?export=download&id=${fileId || trimmed}`;
+
+  // Check if we are running in development or AI Studio preview container (where backend proxy is active)
+  const isLocalOrDev = window.location.hostname === 'localhost' || 
+                       window.location.hostname.includes('127.0.0.1') || 
+                       window.location.hostname.includes('ais-dev-') || 
+                       window.location.hostname.includes('asia-southeast1.run.app');
+
+  if (isLocalOrDev) {
+    if (fileId) {
+      return `/api/drive-proxy?id=${fileId}`;
+    }
     return `/api/drive-proxy?url=${encodeURIComponent(trimmed)}`;
   }
-  return trimmed;
+
+  // For static production deployments (like Vercel or GitHub Pages) where there is no Express backend:
+  // We use Google's own public global image proxy to securely bypass CORS issues on the board canvas
+  return `https://images1-focus-opensocial.googleusercontent.com/gadgets/proxy?container=focus&refresh=2592000&url=${encodeURIComponent(directDriveUrl)}`;
+};
+
+// Unified fetch helper that handles local Express proxy AND direct client-side Vercel/production fallback
+const fetchFromSheetsApi = async (action: string, dataPayload: any = {}): Promise<any> => {
+  const { webAppUrl, spreadsheetId } = getSheetsConfig();
+  if (!webAppUrl) {
+    throw new Error('لم يتم تكوين رابط السكربت. يرجى إدخال الرابط أولاً في الإعدادات.');
+  }
+
+  const requestBody = {
+    action,
+    spreadsheetId,
+    ...dataPayload
+  };
+
+  // Attempt 1: Call via Express backend proxy (great for preview containers/CORS)
+  try {
+    const response = await fetch('/api/sheets-proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        url: webAppUrl,
+        method: 'POST',
+        data: requestBody
+      })
+    });
+
+    if (response.ok) {
+      const text = await response.text();
+      // Check if the response is actually an HTML error page (like Vercel 404 or index fallback)
+      if (text.trim().startsWith('<') || text.trim().startsWith('The page')) {
+        console.warn(`Sheets proxy returned HTML instead of JSON. Falling back to direct browser fetch for action: ${action}`);
+      } else {
+        try {
+          const json = JSON.parse(text);
+          return json;
+        } catch {
+          console.warn(`Sheets proxy returned invalid JSON. Falling back to direct browser fetch for action: ${action}`);
+        }
+      }
+    } else {
+      console.warn(`Proxy responded with status ${response.status}. Falling back to direct browser fetch...`);
+    }
+  } catch (proxyError) {
+    console.warn(`Failed to connect to backend sheets proxy:`, proxyError);
+  }
+
+  // Attempt 2: Fallback to direct client-to-GoogleAppsScript POST.
+  // We use 'text/plain;charset=utf-8' as Content-Type to avoid CORS preflight (OPTIONS) triggers.
+  // Google Apps Script accepts doPost with text/plain, read via e.postData.contents.
+  try {
+    const directResponse = await fetch(webAppUrl, {
+      method: 'POST',
+      mode: 'cors',
+      headers: {
+        'Content-Type': 'text/plain;charset=utf-8'
+      },
+      body: JSON.stringify(requestBody)
+    });
+
+    if (!directResponse.ok) {
+      throw new Error(`تعذر الاتصال المباشر بالسكربت، رمز الاستجابة: ${directResponse.status}`);
+    }
+
+    const text = await directResponse.text();
+    if (text.trim().startsWith('<')) {
+      throw new Error('أعاد السكربت صفحة HTML بدلاً من JSON. تأكد من نشر السكربت كـ Web App مع إتاحة الوصول للجميع (Anyone).');
+    }
+    
+    return JSON.parse(text);
+  } catch (directError: any) {
+    console.error(`Direct fetch to Apps Script failed for action ${action}:`, directError);
+    throw new Error(`فشل الاتصال بـ Google Apps Script: ${directError.message || directError}`);
+  }
 };
 
 // Main fetch function that routes to Server Proxy or local mock
 export const fetchStudentLessons = async (): Promise<StudentLesson[]> => {
-  const { webAppUrl, spreadsheetId } = getSheetsConfig();
+  const { webAppUrl } = getSheetsConfig();
 
   if (!webAppUrl) {
     // Return Mock Data from localStorage if it has modifications, else default mock
@@ -267,17 +367,7 @@ export const fetchStudentLessons = async (): Promise<StudentLesson[]> => {
   }
 
   try {
-    const response = await fetch('/api/sheets-proxy', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        url: webAppUrl,
-        method: 'POST',
-        data: { action: 'getTableData', spreadsheetId: spreadsheetId }
-      })
-    });
-
-    const result = await response.json();
+    const result = await fetchFromSheetsApi('getTableData');
     if (result.success && Array.isArray(result.data)) {
       // Convert GAS array objects to StudentLesson type
       return result.data.map((item: any) => ({
@@ -315,20 +405,11 @@ export const fetchStudentLessons = async (): Promise<StudentLesson[]> => {
 };
 
 export const fetchPredefinedTexts = async (): Promise<PredefinedText[]> => {
-  const { webAppUrl, spreadsheetId } = getSheetsConfig();
+  const { webAppUrl } = getSheetsConfig();
   if (!webAppUrl) return mockPredefinedTexts;
 
   try {
-    const response = await fetch('/api/sheets-proxy', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        url: webAppUrl,
-        method: 'POST',
-        data: { action: 'getPredefinedTexts', spreadsheetId: spreadsheetId }
-      })
-    });
-    const result = await response.json();
+    const result = await fetchFromSheetsApi('getPredefinedTexts');
     if (result.success && Array.isArray(result.data)) {
       return result.data;
     }
@@ -339,20 +420,11 @@ export const fetchPredefinedTexts = async (): Promise<PredefinedText[]> => {
 };
 
 export const fetchWatermarkSettings = async (): Promise<WatermarkSettings> => {
-  const { webAppUrl, spreadsheetId } = getSheetsConfig();
+  const { webAppUrl } = getSheetsConfig();
   if (!webAppUrl) return mockWatermarkSettings;
 
   try {
-    const response = await fetch('/api/sheets-proxy', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        url: webAppUrl,
-        method: 'POST',
-        data: { action: 'getWatermarkSettings', spreadsheetId: spreadsheetId }
-      })
-    });
-    const result = await response.json();
+    const result = await fetchFromSheetsApi('getWatermarkSettings');
     if (result.success && result.data) {
       return {
         logoUrl: result.data.logoUrl || '',
@@ -385,7 +457,7 @@ export const saveLessonCorrection = async (payload: {
   video?: string;
   audio?: string; // Corrective voice note recorded by teacher
 }): Promise<{ success: boolean; urls?: any }> => {
-  const { webAppUrl, spreadsheetId } = getSheetsConfig();
+  const { webAppUrl } = getSheetsConfig();
 
   if (!webAppUrl) {
     // Mock Mode Save: Update local database inside localStorage
@@ -419,34 +491,23 @@ export const saveLessonCorrection = async (payload: {
     const videoFilename = `فيديو_مصحح_صف_${payload.row}_تاريخ_${cleanDate}.mp4`;
     const audioFilename = `صوت_مصحح_صف_${payload.row}_تاريخ_${cleanDate}.mp3`;
 
-    const response = await fetch('/api/sheets-proxy', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        url: webAppUrl,
-        method: 'POST',
-        data: {
-          action: 'saveAllMedia',
-          spreadsheetId: spreadsheetId,
-          params: [
-            payload.modifiedImage || '', // canvasBase64
-            canvasFilename,
-            payload.additionalImage || '', // imageBase64
-            imageFilename,
-            payload.video || '', // videoBase64
-            videoFilename,
-            payload.audio || '', // audioBase64
-            audioFilename,
-            payload.row,
-            payload.notes,
-            payload.imageGrade || '',
-            payload.audioGrade || ''
-          ]
-        }
-      })
+    const result = await fetchFromSheetsApi('saveAllMedia', {
+      params: [
+        payload.modifiedImage || '', // canvasBase64
+        canvasFilename,
+        payload.additionalImage || '', // imageBase64
+        imageFilename,
+        payload.video || '', // videoBase64
+        videoFilename,
+        payload.audio || '', // audioBase64
+        audioFilename,
+        payload.row,
+        payload.notes,
+        payload.imageGrade || '',
+        payload.audioGrade || ''
+      ]
     });
 
-    const result = await response.json();
     if (result.success) {
       return { success: true, urls: result.data };
     }
