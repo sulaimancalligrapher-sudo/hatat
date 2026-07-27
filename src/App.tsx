@@ -11,8 +11,60 @@ import { Product, Order, PromoCode, Student, Member, StoreSettings, CartItem, St
 import { MOCK_SETTINGS, MOCK_PRODUCTS, MOCK_PROMO_CODES, MOCK_STUDENTS, MOCK_MEMBERS, MOCK_ORDERS, MOCK_TEXTS } from './mockData';
 
 export default function App() {
-  // Navigation & UI States
-  const [activeTab, setActiveTab] = useState<string>('shop');
+  // Navigation & UI States with URL Routing
+  const getInitialTab = (): string => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const hash = window.location.hash.replace('#', '').toLowerCase();
+      const pageParam = (params.get('page') || '').toLowerCase();
+      const adminParam = params.get('admin');
+
+      if (pageParam === 'admin' || adminParam === 'true' || hash === 'admin') {
+        return 'admin';
+      }
+      if (pageParam === 'member' || pageParam === 'members' || hash === 'member') {
+        return 'member';
+      }
+    } catch (e) {
+      // Fallback
+    }
+    return 'shop';
+  };
+
+  const [activeTab, setActiveTabState] = useState<string>(getInitialTab);
+
+  // Router aware tab switcher
+  const setActiveTab = (tab: string) => {
+    setActiveTabState(tab);
+    try {
+      const url = new URL(window.location.href);
+      if (tab === 'admin') {
+        url.searchParams.set('page', 'admin');
+      } else if (tab === 'member') {
+        url.searchParams.set('page', 'member');
+      } else {
+        url.searchParams.delete('page');
+        url.searchParams.delete('admin');
+      }
+      window.history.pushState({}, '', url.toString());
+    } catch (e) {
+      console.error('Failed to update URL state', e);
+    }
+  };
+
+  // Sync state with back/forward history navigation
+  useEffect(() => {
+    const handlePopState = () => {
+      setActiveTabState(getInitialTab());
+    };
+    window.addEventListener('popstate', handlePopState);
+    window.addEventListener('hashchange', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+      window.removeEventListener('hashchange', handlePopState);
+    };
+  }, []);
+
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
@@ -143,6 +195,7 @@ export default function App() {
               const isActive = statusVal === 'true' || statusVal === 'نعم' || statusVal === 'active' || statusVal === 'نشط';
               const targetGroupRaw = row[9] ? row[9].toString().trim().toLowerCase() : 'general';
               const categoryType = (targetGroupRaw === 'طالب' || targetGroupRaw === 'طلاب' || targetGroupRaw === 'student') ? 'student' : 
+                                   (targetGroupRaw === 'عضو جديد' || targetGroupRaw === 'عضو_جديد' || targetGroupRaw === 'new member' || targetGroupRaw === 'new_member') ? 'new_member' :
                                    (targetGroupRaw === 'عضو' || targetGroupRaw === 'أعضاء' || targetGroupRaw === 'member') ? 'member' : 'general';
               
               return {
@@ -406,6 +459,21 @@ export default function App() {
           const matchedMember = members.find(m => m.email.toLowerCase() === email?.toLowerCase() || m.phone === phone);
           if (!matchedMember) {
             return { valid: false, discount: 0, message: 'عذراً، هذا الكوبون مخصص للأعضاء المشتركين فقط 💎', eligibleProducts: 'all' };
+          }
+        }
+      }
+
+      // G. New Member Verification (first order only)
+      if (found.categoryType === 'new_member') {
+        if (email || phone) {
+          const matchedMember = members.find(m => m.email.toLowerCase() === email?.toLowerCase() || m.phone === phone);
+          if (!matchedMember) {
+            return { valid: false, discount: 0, message: 'عذراً، هذا الكوبون مخصص للأعضاء المشتركين فقط 💎', eligibleProducts: 'all' };
+          }
+          const contactClean = (email || phone || '').trim().toLowerCase();
+          const hasPastOrder = orders.some(o => o.email?.toLowerCase() === contactClean || o.phone === contactClean);
+          if (hasPastOrder) {
+            return { valid: false, discount: 0, message: 'عذراً، هذا الكوبون مخصص للطلب الأول فقط للأعضاء الجدد 🛡️', eligibleProducts: 'all' };
           }
         }
       }
@@ -872,6 +940,7 @@ export default function App() {
             onUpdateSettings={(newS) => setSettings(newS)}
             onAddProduct={handleAddProduct}
             onAddPromoCode={handleAddPromoCode}
+            onReturnToShop={() => setActiveTab('shop')}
           />
         </div>
       )}
@@ -895,8 +964,8 @@ export default function App() {
               <div className="grid grid-cols-2 gap-2">
                 <button onClick={() => { setActiveTab('shop'); setSelectedCategory('all'); }} className="text-right hover:text-gold-400 transition-colors">{texts.footerLinkBrowse || 'تصفح المعرض'}</button>
                 <button onClick={() => { setActiveTab('member'); }} className="text-right hover:text-gold-400 transition-colors">{texts.footerLinkSubscribe || 'اشترك بالعضوية'}</button>
-                <button onClick={() => { setActiveTab('admin'); }} className="text-right hover:text-gold-400 transition-colors">{texts.footerLinkAdmin || 'بوابة الإدارة'}</button>
                 <button onClick={() => { setActiveTab('shop'); }} className="text-right hover:text-gold-400 transition-colors">{texts.footerLinkOffers || 'عروض وتخفيضات'}</button>
+                <a href="#contact" className="text-right hover:text-gold-400 transition-colors">الدعم والتواصل</a>
               </div>
             </div>
 

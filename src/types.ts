@@ -34,7 +34,7 @@ export interface PromoCode {
   expiryDate?: string; // YYYY-MM-DD
   usageLimit?: number;
   usageCount: number;
-  categoryType: 'general' | 'student' | 'member';
+  categoryType: 'general' | 'student' | 'member' | 'new_member';
   assignedIdentifier?: string; // student ID or member email
   usedByContacts: string[]; // list of contacts (email or phone) who have used it
   customerUsageLimit?: number; // max usages per unique customer (email or phone)

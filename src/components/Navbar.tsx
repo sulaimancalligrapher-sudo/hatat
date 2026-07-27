@@ -53,12 +53,12 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
 
           {/* Navigation Links */}
-          <div className="hidden md:flex space-x-4 space-x-reverse">
+          <div className="hidden md:flex items-center space-x-4 space-x-reverse">
             <button
               onClick={() => setActiveTab('shop')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${
                 activeTab === 'shop'
-                  ? 'bg-gold-500/10 text-gold-300 border border-gold-500/30'
+                  ? 'bg-gold-500/10 text-gold-300 border border-gold-500/30 font-bold'
                   : 'text-stone-300 hover:text-gold-300 hover:bg-stone-900'
               }`}
             >
@@ -67,44 +67,27 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
             <button
               onClick={() => setActiveTab('member')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${
                 activeTab === 'member'
-                  ? 'bg-gold-500/10 text-gold-300 border border-gold-500/30'
+                  ? 'bg-gold-500/10 text-gold-300 border border-gold-500/30 font-bold'
                   : 'text-stone-300 hover:text-gold-300 hover:bg-stone-900'
               }`}
             >
               <UserPlus size={16} />
               <span>{texts.tabMembersText || 'نادي العضوية'}</span>
             </button>
-            <button
-              onClick={() => setActiveTab('admin')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                activeTab === 'admin'
-                  ? 'bg-gold-500/10 text-gold-300 border border-gold-500/30'
-                  : 'text-stone-300 hover:text-gold-300 hover:bg-stone-900'
-              }`}
-            >
-              <Shield size={16} />
-              <span>{texts.tabAdminText || 'لوحة الإدارة'}</span>
-            </button>
+
+            {/* Admin mode active indicator (Only shown when admin panel is active) */}
+            {activeTab === 'admin' && (
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm">
+                <Shield size={15} className="text-amber-400" />
+                <span>لوحة الإدارة (مستقلة)</span>
+              </div>
+            )}
           </div>
 
-          {/* Action Buttons & Badges */}
+          {/* Action Buttons */}
           <div className="flex items-center gap-3">
-            {/* Demo Badge */}
-            {isDemoMode && (
-              <span className="bg-amber-500/10 text-amber-300 border border-amber-500/30 text-xs px-2.5 py-1 rounded-full font-medium shadow-sm">
-                وضع المعاينة التجريبي
-              </span>
-            )}
-            
-            {/* Connected Badge */}
-            {!isDemoMode && hasSheetsConfigured && (
-              <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 text-xs px-2.5 py-1 rounded-full font-medium shadow-sm">
-                متصل بـ Google Sheets
-              </span>
-            )}
-
             {/* Shopping Cart Trigger */}
             <button
               onClick={openCart}
@@ -142,15 +125,15 @@ export const Navbar: React.FC<NavbarProps> = ({
           <UserPlus size={18} />
           <span>{texts.tabMembersText || 'نادي العضوية'}</span>
         </button>
-        <button
-          onClick={() => setActiveTab('admin')}
-          className={`flex flex-col items-center gap-1 transition-all ${
-            activeTab === 'admin' ? 'text-gold-400 font-bold' : 'text-stone-400'
-          }`}
-        >
-          <Shield size={18} />
-          <span>{texts.tabAdminText || 'لوحة الإدارة'}</span>
-        </button>
+        {activeTab === 'admin' && (
+          <button
+            onClick={() => setActiveTab('admin')}
+            className="flex flex-col items-center gap-1 text-amber-400 font-bold"
+          >
+            <Shield size={18} />
+            <span>لوحة الإدارة</span>
+          </button>
+        )}
       </div>
     </nav>
   );
